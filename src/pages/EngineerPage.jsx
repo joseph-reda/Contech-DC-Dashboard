@@ -784,18 +784,17 @@ export default function EngineerPage() {
                             />
                             <div>
                                 <label className="block font-bold text-gray-700 mb-1 text-sm">
+                                    Rev No
                                 </label>
                                 <input
                                     type="text"
                                     value={revText}
                                     onChange={(e) => setRevText(e.target.value)}
                                     className="w-full border-2 border-gray-200 rounded-lg p-3 focus:border-amber-500 outline-none"
-                                    placeholder="أدخل رقم المراجعة (مثل: R1, R2, 001...)"
+                                    placeholder="REv Nomber"
                                     required
                                 />
-                                <p className="text-xs text-gray-500 mt-1">
-                                    Rev No
-                                </p>
+                             
                             </div>
                             <div>
                                 <label className="block font-bold text-gray-700 mb-1 text-sm">

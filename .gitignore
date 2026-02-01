@@ -1,0 +1,12 @@
+node_modules/
+Flask/node_modules/
+
+.env
+*.env
+
+Flask/serviceAccountKey.json
+*.key
+*.pem
+
+*.swp
+__pycache__/

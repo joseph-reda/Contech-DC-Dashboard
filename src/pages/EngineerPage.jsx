@@ -784,7 +784,6 @@ export default function EngineerPage() {
                             />
                             <div>
                                 <label className="block font-bold text-gray-700 mb-1 text-sm">
-                                    📝 **رقم المراجعة (مهم!)**
                                 </label>
                                 <input
                                     type="text"
@@ -795,7 +794,7 @@ export default function EngineerPage() {
                                     required
                                 />
                                 <p className="text-xs text-gray-500 mt-1">
-                                    ⚠️ **هذا الرقم سيظهر في صفحة DC - اختر رقماً واضحاً**
+                                    Rev No
                                 </p>
                             </div>
                             <div>

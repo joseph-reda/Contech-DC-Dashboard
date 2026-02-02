@@ -1,933 +1,803 @@
-// EngineerRecords.jsx
+// src/pages/EngineerPage.jsx
 import { useEffect, useState } from "react";
+import { useSearchParams, useNavigate } from "react-router-dom";
+import SearchableInput from "../components/SearchableInput";
 import { API_URL } from "../config";
-import { useNavigate } from "react-router-dom";
 
-export default function EngineerRecords() {
+export default function EngineerPage() {
+    const [searchParams, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
-    const user = JSON.parse(localStorage.getItem("user") || "null");
 
-    // Redirect to login if not authenticated
-    if (!user || !user.username) {
-        navigate("/login");
-        return null;
-    }
+    // الحصول على النوع من الرابط، الافتراضي هو IR
+    const requestType = searchParams.get("type")?.toUpperCase() || "IR";
 
-    const [tab, setTab] = useState("personal"); // personal, department, all
-    const [items, setItems] = useState([]);
-    const [loading, setLoading] = useState(true);
-    const [error, setError] = useState("");
-    
-    // Filters
-    const [projectFilter, setProjectFilter] = useState("all");
-    const [typeFilter, setTypeFilter] = useState("all"); // all, ir, cpr, revision
-    const [dateFilter, setDateFilter] = useState("all"); // all, today, week, month
-    const [statusFilter, setStatusFilter] = useState("all"); // all, pending, completed
-    const [departmentFilter, setDepartmentFilter] = useState("all");
-    
-    // Data for filters
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    const department = user?.department || "";
+
+    // تحقق إذا كان المستخدم مدنياً (يسمح له بإنشاء CPR)
+    const isCivilEngineer = department?.toLowerCase().includes("civil") ||
+        department?.toLowerCase().includes("structure");
+
+    // Form states
+    const [selectedProject, setSelectedProject] = useState("");
+    const [selectedLocation, setSelectedLocation] = useState("");
+    const [selectedFloor, setSelectedFloor] = useState(""); // ✅ حقل Floor جديد
+    const [generalDesc, setGeneralDesc] = useState("");
+    const [finalDescription, setFinalDescription] = useState("");
+
+    // حقول CPR الإضافية
+    const [pouringElement, setPouringElement] = useState("");
+
+    // حقول Tags
+    const [irTags, setIrTags] = useState([]);
+    const [sdTags, setSdTags] = useState([]);
+    const [irInput, setIrInput] = useState("");
+    const [sdInput, setSdInput] = useState("");
+    const [saving, setSaving] = useState(false);
+    const [baseDescriptions, setBaseDescriptions] = useState([]);
+    const [floors, setAvailableFloors] = useState([]);
+    const [cprElements, setCprElements] = useState([]);
+
+    // UI / data states
     const [projects, setProjects] = useState([]);
-    const [departments, setDepartments] = useState([]);
-    
-    // Stats
-    const [stats, setStats] = useState({
-        personal: { total: 0, pending: 0, completed: 0, ir: 0, cpr: 0, revisions: 0 },
-        department: { total: 0, pending: 0, completed: 0, ir: 0, cpr: 0, revisions: 0 },
-        all: { total: 0, pending: 0, completed: 0, ir: 0, cpr: 0, revisions: 0 }
-    });
+    const [locations, setLocations] = useState([]);
+    const [typesMap, setTypesMap] = useState({});
+    const [loadingProjects, setLoadingProjects] = useState(true);
+    const [loadingData, setLoadingData] = useState(false);
 
-    // Load data
+    // REV modal
+    const [showRevModal, setShowRevModal] = useState(false);
+    const [revProject, setRevProject] = useState("");
+    const [revText, setRevText] = useState("");
+    const [revNote, setRevNote] = useState("");
+    const [revSaving, setRevSaving] = useState(false);
+  
+    // 1. تحميل المشاريع والإعدادات
     useEffect(() => {
-        loadProjects();
-        fetchData();
-    }, [tab, user.username, user.department, user.role]);
+        fetch(`${API_URL}/projects`)
+            .then(r => r.json())
+            .then(data => {
+                const projectList = Object.keys(data.projects || {}).sort();
+                console.log("📋 Projects loaded:", projectList);
+                setProjects(projectList);
+            })
+            .catch((err) => {
+                console.error("Projects load failed:", err);
+                // قيم افتراضية للمشاريع
+                setProjects(["D6-A1", "D6-A2", "D1-A2-02-01-F.F", "D1-V2B"]);
+            })
+            .finally(() => setLoadingProjects(false));
+    }, []);
 
-    // Load projects list
-    const loadProjects = async () => {
+    // دالة محسنة لتحميل الأوصاف
+    const loadDescriptions = (projectName) => {
+        console.log(`🔄 Loading descriptions for:`, {
+            project: projectName,
+            department,
+            requestType
+        });
+
+        if (!projectName || !department) {
+            console.log("⚠️ Missing project or department");
+            if (requestType === "CPR") {
+                setBaseDescriptions(["Select concrete pouring element..."]);
+                setCprElements(["Foundation", "Columns", "Beams", "Slabs", "Walls"]);
+            } else {
+                setBaseDescriptions(["Please select a project first"]);
+                setAvailableFloors(["Basement", "Ground Floor"]);
+            }
+            return;
+        }
+
+        // إذا كان CPR، تأكد من أن المستخدم مدني
+        if (requestType === "CPR" && !isCivilEngineer) {
+            console.warn("⚠️ Non-civil engineer trying to access CPR descriptions");
+            setBaseDescriptions(["CPR is only available for Civil/Structure engineers"]);
+            setCprElements([]);
+            return;
+        }
+
+        console.log(`🔗 Calling API: ${API_URL}/general-descriptions?project=${projectName}&dept=${department}&requestType=${requestType}`);
+
+        fetch(`${API_URL}/general-descriptions?project=${projectName}&dept=${department}&requestType=${requestType}`)
+            .then(r => {
+                console.log(`📡 Descriptions API Response status: ${r.status}`);
+                if (!r.ok) {
+                    throw new Error(`HTTP error! status: ${r.status}`);
+                }
+                return r.json();
+            })
+            .then(data => {
+                console.log("✅ Loaded descriptions data:", data);
+
+                if (requestType === "CPR") {
+                    // ✅ لـ CPR: استخدم base و grades و elements
+                    const baseElements = data.base || ["Foundation", "Columns", "Beams", "Slabs", "Walls"];
+                    const grades = data.grades || ["K-250", "K-300", "K-350", "K-400"];
+                    const elements = data.elements || ["Foundation", "Columns", "Beams", "Slabs", "Walls"];
+
+                    setBaseDescriptions(baseElements);
+                    setCprElements(elements);
+
+                    console.log("🏗️ CPR data loaded:", {
+                        baseElements,
+                        grades,
+                        elements
+                    });
+                } else {
+                    // IR عادي: استخدام البيانات الأصلية
+                    setBaseDescriptions(data.base || ["Inspection request"]);
+                    setAvailableFloors(data.floors || ["Basement", "Ground Floor"]);
+                }
+            })
+            .catch((err) => {
+                console.error("❌ Descriptions load failed:", err);
+
+                // قيم افتراضية
+                if (requestType === "CPR") {
+                    const defaultBase = ["Foundation", "Columns", "Beams", "Slabs", "Walls"];
+                    setBaseDescriptions(defaultBase);
+                    setCprElements(["Foundation", "Columns", "Beams", "Slabs", "Walls"]);
+                } else {
+                    setBaseDescriptions([
+                        "Inspection of structural elements",
+                        "Concrete pouring inspection",
+                        "Rebar installation inspection",
+                        "Formwork inspection"
+                    ]);
+                    setAvailableFloors(["Basement", "Ground Floor", "1st Floor", "2nd Floor"]);
+                }
+            });
+    };
+
+    // 2. تحميل المواقع عند اختيار المشروع
+    useEffect(() => {
+        if (!selectedProject) {
+            console.log("⚠️ No project selected for locations");
+            setLocations([]);
+            setTypesMap({});
+            return;
+        }
+
+        console.log(`🔄 Loading locations for project: ${selectedProject}`);
+        setLoadingData(true);
+
+        // إظهار loading state
+        setLocations(["Loading locations..."]);
+
+        fetch(`${API_URL}/locations?project=${selectedProject}`)
+            .then(r => {
+                console.log(`📡 Locations API Response status: ${r.status}`);
+                if (!r.ok) {
+                    throw new Error(`HTTP error! status: ${r.status}`);
+                }
+                return r.json();
+            })
+            .then(data => {
+                console.log("✅ Locations API response:", {
+                    locationsCount: data.locations?.length,
+                    typesMapCount: Object.keys(data.types_map || {}).length,
+                    sampleLocations: data.locations?.slice(0, 3)
+                });
+
+                if (!data.locations || data.locations.length === 0) {
+                    console.warn("⚠️ No locations returned from API");
+                    setLocations([`No locations configured for ${selectedProject}`]);
+                    setTypesMap({});
+                } else {
+                    // استخدام البيانات مباشرة
+                    setLocations(data.locations);
+                    setTypesMap(data.types_map || {});
+                    console.log(`📍 Set ${data.locations.length} locations and types map`);
+                }
+
+                // ✅ تحميل الأوصاف بعد تحميل المشروع
+                loadDescriptions(selectedProject);
+            })
+            .catch((err) => {
+                console.error("❌ Locations load failed:", err);
+
+                setLocations([
+                    `Error loading locations for ${selectedProject}`,
+                    "Please check API connection"
+                ]);
+                setTypesMap({});
+
+                // مع ذلك، حاول تحميل الأوصاف
+                loadDescriptions(selectedProject);
+            })
+            .finally(() => {
+                setLoadingData(false);
+            });
+    }, [selectedProject]);
+
+    // 3. تحديث الوصف النهائي تلقائياً
+    useEffect(() => {
+        let description = generalDesc || "";
+
+        const locStr = selectedLocation ? ` ${selectedLocation}` : "";
+
+        let finalDesc = "";
+
+        if (requestType === "CPR") {
+            // ✅ لـ CPR: Concrete Pouring Request for [وصف] [الموقع]
+            finalDesc = `Concrete Pouring Request for ${description} At${locStr}`;
+        } else {
+            // ✅ لـ IR العادي: [وصف] [الموقع] [الطابق] (نوع)
+            const floorStr = selectedFloor ? ` ${selectedFloor}` : "";
+            const typeStr = typesMap[selectedLocation] ? ` (${typesMap[selectedLocation]})` : "";
+            finalDesc = `${description} For${floorStr} AT${locStr}${typeStr}`.trim();
+        }
+
+        setFinalDescription(finalDesc);
+        console.log("📝 Final description updated:", finalDesc);
+
+    }, [generalDesc, selectedLocation, selectedFloor, typesMap, requestType]);
+
+    // 🛠️ دالة مساعدة لإعادة تحميل البيانات (إذا كنت بحاجة لها)
+    const reloadData = () => {
+        // يمكنك إضافة أي إعادة تحميل للبيانات هنا إذا لزم الأمر
+        console.log("🔄 Reloading data...");
+
+        // إعادة تحميل المشاريع
+        fetch(`${API_URL}/projects`)
+            .then(r => r.json())
+            .then(data => {
+                const projectList = Object.keys(data.projects || {}).sort();
+                setProjects(projectList);
+            })
+            .catch((err) => {
+                console.error("Failed to reload projects:", err);
+            });
+
+        // إذا كان هناك مشروع محدد، إعادة تحميل مواقعه
+        if (selectedProject) {
+            loadDescriptions(selectedProject);
+        }
+    };
+
+    // دالة الإرسال (Submit)
+    const handleSave = async () => {
+        // ✅ التحقق الإضافي لـ CPR
+        if (requestType === "CPR" && !isCivilEngineer) {
+            alert("CPR requests are only available for Civil/Structure engineers");
+            return;
+        }
+
+        // التحقق من الحقول المطلوبة
+        if (!selectedProject) {
+            alert("Please select a project");
+            return;
+        }
+
+        if (!selectedLocation) {
+            alert("Please select a location");
+            return;
+        }
+
+        if (!generalDesc) {
+            alert("Please select a work description");
+            return;
+        }
+
+        // ✅ تحقق إضافي لـ IR: يجب اختيار الطابق
+        if (requestType === "IR" && !selectedFloor) {
+            alert("Please select a floor for IR requests");
+            return;
+        }
+
+        setSaving(true);
+
+        // ✅ إنشاء payload مختلف لـ CPR و IR
+        let payload;
+
+        if (requestType === "CPR") {
+            // ✅ لـ CPR: بدون floor
+            payload = {
+                project: selectedProject,
+                location: selectedLocation,
+                // ❌ NO FLOOR FOR CPR
+                desc: finalDescription,
+                user: user.username,
+                department: department,
+                requestType: "CPR",
+                engineerNote: irInput,
+                sdNote: sdInput,
+                tags: { engineer: irTags, sd: sdTags },
+                // ✅ إضافة حقول CPR الإضافية
+                pouringElement: generalDesc || ""
+            };
+        } else {
+            // ✅ لـ IR العادي: مع floor
+            payload = {
+                project: selectedProject,
+                location: selectedLocation,
+                floor: selectedFloor || "", // ✅ نحتاج الـ floor لـ IR
+                desc: finalDescription,
+                user: user.username,
+                department: department,
+                requestType: "IR",
+                engineerNote: irInput,
+                sdNote: sdInput,
+                tags: { engineer: irTags, sd: sdTags }
+            };
+        }
+
+        console.log("📤 Submitting payload:", payload);
+
         try {
-            const res = await fetch(`${API_URL}/projects`);
+            const res = await fetch(`${API_URL}/irs`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify(payload)
+            });
+
             const data = await res.json();
-            setProjects(Object.keys(data.projects || {}).sort());
-        } catch (err) {
-            console.error("Error loading projects:", err);
-        }
-    };
 
-    // Load departments list (for admin)
-    const loadDepartments = async () => {
-        if (user.role === "admin") {
-            try {
-                const res = await fetch(`${API_URL}/users`);
-                const data = await res.json();
-                const depts = [...new Set(data.users?.map(u => u.department).filter(Boolean))].sort();
-                setDepartments(depts);
-            } catch (err) {
-                console.error("Error loading departments:", err);
-            }
-        }
-    };
+            if (res.ok) {
+                alert(`${requestType === "CPR" ? "ORC (CPR)" : requestType} Created Successfully!\nNumber: ${data.ir?.irNo || "Generated"}`);
 
-    // Fetch data based on selected tab
-    const fetchData = async () => {
-        setLoading(true);
-        setError("");
+                // ريست للفورم
+                resetForm();
 
-        try {
-            let allItems = [];
-            
-            // Admin can see everything
-            if (user.role === "admin") {
-                const [irsRes, revsRes, archiveRes] = await Promise.all([
-                    fetch(`${API_URL}/irs`),
-                    fetch(`${API_URL}/revs`),
-                    fetch(`${API_URL}/archive/engineer?user=${user.username}`)
-                ]);
-                
-                const irsData = await irsRes.json();
-                const revsData = await revsRes.json();
-                const archiveData = await archiveRes.json();
-                
-                const activeIRs = (irsData.irs || []).map(item => ({
-                    ...item,
-                    type: item.requestType || "IR",
-                    isCPR: item.requestType === "CPR",
-                    isRevision: false,
-                    isArchived: false,
-                    downloadedBy: item.downloadedBy || ""
-                }));
-                
-                const activeRevs = (revsData.revs || []).map(item => ({
-                    ...item,
-                    type: "REVISION",
-                    isRevision: true,
-                    isCPR: item.revisionType === "CPR_REVISION",
-                    isArchived: false,
-                    downloadedBy: item.downloadedBy || ""
-                }));
-                
-                const archivedItems = (archiveData.archive || []).map(item => ({
-                    ...item,
-                    type: item.isRevision ? "REVISION" : (item.requestType || "IR"),
-                    isCPR: item.isRevision ? item.revisionType === "CPR_REVISION" : item.requestType === "CPR",
-                    isArchived: true,
-                    downloadedBy: item.downloadedBy || ""
-                }));
-                
-                allItems = [...activeIRs, ...activeRevs, ...archivedItems];
-                
+                // إذا كان CPR، العودة إلى IR تلقائياً
+                if (requestType === "CPR") {
+                    setTimeout(() => {
+                        navigate("/engineer?type=IR");
+                    }, 1500);
+                }
             } else {
-                // Regular users see their own data and department data
-                const [personalIRsRes, personalRevsRes, departmentIRsRes, archiveRes] = await Promise.all([
-                    fetch(`${API_URL}/irs-by-user-and-dept?user=${user.username}&dept=${user.department}`),
-                    fetch(`${API_URL}/revs`),
-                    user.role === "head" ? fetch(`${API_URL}/irs`) : Promise.resolve({ json: () => ({ irs: [] }) }),
-                    fetch(`${API_URL}/archive/engineer?user=${user.username}`)
-                ]);
-                
-                const personalIRsData = await personalIRsRes.json();
-                const personalRevsData = await personalRevsRes.json();
-                const departmentIRsData = await departmentIRsRes.json();
-                const archiveData = await archiveRes.json();
-                
-                // Personal IRs
-                const personalIRs = [...(personalIRsData.irs || []), ...(personalIRsData.revs || [])]
-                    .map(item => ({
-                        ...item,
-                        type: item.requestType || "IR",
-                        isCPR: item.requestType === "CPR",
-                        isRevision: item.isRevision || false,
-                        isArchived: false,
-                        isPersonal: true,
-                        downloadedBy: item.downloadedBy || ""
-                    }));
-                
-                // Personal Revisions
-                const personalRevs = (personalRevsData.revs || [])
-                    .filter(rev => rev.user === user.username)
-                    .map(rev => ({
-                        ...rev,
-                        type: "REVISION",
-                        isRevision: true,
-                        isCPR: rev.revisionType === "CPR_REVISION",
-                        isArchived: false,
-                        isPersonal: true,
-                        downloadedBy: rev.downloadedBy || ""
-                    }));
-                
-                // Department IRs (for head of department)
-                const departmentIRs = (departmentIRsData.irs || [])
-                    .filter(ir => ir.department === user.department && ir.user !== user.username)
-                    .map(item => ({
-                        ...item,
-                        type: item.requestType || "IR",
-                        isCPR: item.requestType === "CPR",
-                        isRevision: false,
-                        isArchived: false,
-                        isPersonal: false,
-                        downloadedBy: item.downloadedBy || ""
-                    }));
-                
-                // Department Revisions (for head of department)
-                const departmentRevs = user.role === "head" ? 
-                    (personalRevsData.revs || [])
-                        .filter(rev => rev.department === user.department && rev.user !== user.username)
-                        .map(rev => ({
-                            ...rev,
-                            type: "REVISION",
-                            isRevision: true,
-                            isCPR: rev.revisionType === "CPR_REVISION",
-                            isArchived: false,
-                            isPersonal: false,
-                            downloadedBy: rev.downloadedBy || ""
-                        })) : [];
-                
-                // Archived items
-                const archivedItems = (archiveData.archive || []).map(item => ({
-                    ...item,
-                    type: item.isRevision ? "REVISION" : (item.requestType || "IR"),
-                    isCPR: item.isRevision ? item.revisionType === "CPR_REVISION" : item.requestType === "CPR",
-                    isArchived: true,
-                    isPersonal: item.user === user.username,
-                    downloadedBy: item.downloadedBy || ""
-                }));
-                
-                allItems = [...personalIRs, ...personalRevs, ...departmentIRs, ...departmentRevs, ...archivedItems];
+                throw new Error(data.error || `Failed to create ${requestType}`);
             }
-            
-            // Sort by date (newest first)
-            allItems.sort((a, b) => {
-                const dateA = new Date(a.sentAt || a.receivedDate || a.archivedAt || 0);
-                const dateB = new Date(b.sentAt || b.receivedDate || b.archivedAt || 0);
-                return dateB - dateA;
-            });
-            
-            setItems(allItems);
-            calculateStats(allItems);
-            loadDepartments();
-            
         } catch (err) {
-            console.error("Fetch error:", err);
-            setError("Failed to load records. Please try again.");
-            setItems([]);
+            console.error("Save error:", err);
+            alert(`Error saving ${requestType}: ${err.message}`);
         } finally {
-            setLoading(false);
+            setSaving(false);
         }
     };
 
-    // Calculate statistics
-    const calculateStats = (itemsList) => {
-        const personalItems = itemsList.filter(item => item.isPersonal || item.user === user.username);
-        const departmentItems = itemsList.filter(item => 
-            item.department === user.department || 
-            (user.role === "head" && item.department === user.department)
-        );
-        const allItems = itemsList;
-        
-        const calculate = (list) => ({
-            total: list.length,
-            pending: list.filter(item => !item.isDone && !item.isArchived).length,
-            completed: list.filter(item => item.isDone || item.isArchived).length,
-            ir: list.filter(item => !item.isCPR && !item.isRevision).length,
-            cpr: list.filter(item => item.isCPR && !item.isRevision).length,
-            revisions: list.filter(item => item.isRevision).length
-        });
-        
-        setStats({
-            personal: calculate(personalItems),
-            department: calculate(departmentItems),
-            all: calculate(allItems)
-        });
+    // دالة إعادة تعيين الفورم
+    const resetForm = () => {
+        setGeneralDesc("");
+        setIrTags([]);
+        setSdTags([]);
+        setIrInput("");
+        setSdInput("");
+        setSelectedLocation("");
+        setSelectedFloor(""); // ✅ إعادة تعيين floor
+        setFinalDescription("");
+        setPouringElement(""); // ✅ إعادة تعيين عنصر الصب
     };
 
-    // Apply filters
-    const filteredItems = items.filter(item => {
-        // Filter by tab
-        if (tab === "personal" && !item.isPersonal && item.user !== user.username) return false;
-        if (tab === "department" && item.department !== user.department) return false;
-        
-        // Filter by project
-        if (projectFilter !== "all" && item.project !== projectFilter) return false;
-        
-        // Filter by type
-        if (typeFilter !== "all") {
-            if (typeFilter === "ir" && (item.isCPR || item.isRevision)) return false;
-            if (typeFilter === "cpr" && (!item.isCPR || item.isRevision)) return false;
-            if (typeFilter === "revision" && !item.isRevision) return false;
+    // تبديل بين IR و CPR
+    const switchRequestType = (type) => {
+        const newType = type.toUpperCase();
+
+        // ✅ إذا كان المستخدم يحاول الوصول لـ CPR وهو ليس مدنياً
+        if (newType === "CPR" && !isCivilEngineer) {
+            alert("CPR requests are only available for Civil/Structure engineers");
+            return;
         }
-        
-        // Filter by date
-        if (dateFilter !== "all") {
-            const itemDate = new Date(item.sentAt || item.receivedDate || item.archivedAt);
-            const today = new Date();
-            
-            switch (dateFilter) {
-                case "today":
-                    if (itemDate.toDateString() !== today.toDateString()) return false;
-                    break;
-                case "week":
-                    const weekAgo = new Date(today);
-                    weekAgo.setDate(today.getDate() - 7);
-                    if (itemDate < weekAgo) return false;
-                    break;
-                case "month":
-                    const monthAgo = new Date(today);
-                    monthAgo.setMonth(today.getMonth() - 1);
-                    if (itemDate < monthAgo) return false;
-                    break;
+
+        setSearchParams({ type: type.toLowerCase() });
+        resetForm();
+        setSelectedProject(""); // إعادة تعيين المشروع أيضاً
+
+        // عند التبديل، إعادة تحميل الأوصاف إذا كان هناك مشروع محدد
+        if (selectedProject) {
+            loadDescriptions(selectedProject);
+        }
+    };
+
+    // دالة إضافة REVISION
+    async function handleSaveRev() {
+        if (!revProject || !revText.trim()) {
+            alert("Please select project and enter revision number");
+            return;
+        }
+
+        let revisionType = "IR_REVISION";
+        let parentRequestType = "IR";
+
+        if (requestType === "CPR") {
+            if (!isCivilEngineer) {
+                alert("CPR revisions are only available for Civil/Structure engineers");
+                return;
             }
+            revisionType = "CPR_REVISION";
+            parentRequestType = "CPR";
         }
-        
-        // Filter by status
-        if (statusFilter !== "all") {
-            if (statusFilter === "pending" && (item.isDone || item.isArchived)) return false;
-            if (statusFilter === "completed" && !item.isDone && !item.isArchived) return false;
-        }
-        
-        // Filter by department (for admin)
-        if (departmentFilter !== "all" && item.department !== departmentFilter) return false;
-        
-        return true;
-    });
 
-    // Handle actions
-    const handleViewDetails = (item) => {
-        alert(`Details for ${item.irNo || item.revNo}:\n\n` +
-            `Project: ${item.project}\n` +
-            `Type: ${item.type}\n` +
-            `User: ${item.user}\n` +
-            `Department: ${item.department}\n` +
-            `Description: ${item.desc || item.revNote}\n` +
-            `Date: ${formatDate(item.sentAt || item.receivedDate)}\n` +
-            `Status: ${item.isArchived ? "Archived" : item.isDone ? "Completed" : "Pending"}\n` +
-            `Location: ${item.location || "N/A"}\n` +
-            `Floor: ${item.floor || "N/A"}\n` +
-            `Downloaded by: ${item.downloadedBy || "Not downloaded"}`);
-    };
-
-    const handleCopyToClipboard = async (item) => {
-        const text = `${item.irNo || item.revNo} - ${item.desc || item.revNote} - ${item.project}`;
+        setRevSaving(true);
         try {
-            await navigator.clipboard.writeText(text);
-            showToast("Copied to clipboard!");
-        } catch (err) {
-            console.error("Copy failed:", err);
-            showToast("Failed to copy");
-        }
-    };
-
-    const handleArchive = async (item) => {
-        if (!window.confirm(`Archive ${item.irNo || item.revNo}?`)) return;
-
-        try {
-            const res = await fetch(`${API_URL}/archive`, {
+            const res = await fetch(`${API_URL}/revs`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    irNo: item.irNo || item.revNo,
-                    role: "engineer",
-                    isRevision: item.isRevision || false,
-                    revisionType: item.isCPR ? "CPR_REVISION" : "IR_REVISION"
-                }),
+                    project: revProject,
+                    revText: revText.trim(),
+                    revNote: revNote,
+                    user: user.username,
+                    department: department,
+                    revisionType: revisionType,
+                    parentRequestType: parentRequestType
+                })
             });
 
-            if (res.ok) {
-                showToast("Item archived successfully!");
-                fetchData();
-            } else {
-                const data = await res.json();
-                throw new Error(data.error || "Archive failed");
-            }
-        } catch (err) {
-            console.error("Archive error:", err);
-            showToast(`Archive failed: ${err.message}`);
-        }
-    };
-
-    const handleUnarchive = async (item) => {
-        if (!window.confirm(`Restore ${item.irNo || item.revNo} from archive?`)) return;
-
-        try {
-            const res = await fetch(`${API_URL}/unarchive`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    irNo: item.irNo || item.revNo,
-                    role: "engineer",
-                    isRevision: item.isRevision || false
-                }),
-            });
+            const data = await res.json();
 
             if (res.ok) {
-                showToast("Item restored successfully!");
-                fetchData();
+                const revTypeDisplay = revisionType === "CPR_REVISION" ? "CPR Revision" : "IR Revision";
+                const displayNum = data.rev?.displayNumber || data.rev?.userRevNumber || "REV";
+
+                alert(`✅ ${revTypeDisplay} ${displayNum} Sent to DC!`);
+
+                setShowRevModal(false);
+                setRevProject("");
+                setRevText("");
+                setRevNote("");
+
+                // لا يوجد استدعاء لدالة غير معرفة
             } else {
-                const data = await res.json();
-                throw new Error(data.error || "Restore failed");
+                throw new Error(data.error || `Failed to create revision`);
             }
         } catch (err) {
-            console.error("Unarchive error:", err);
-            showToast(`Restore failed: ${err.message}`);
+            console.error("Revision creation error:", err);
+            alert(`❌ Failed to create revision: ${err.message}`);
+        } finally {
+            setRevSaving(false);
         }
-    };
-
-    const handleMarkDone = async (item) => {
-        if (!window.confirm(`Mark ${item.irNo || item.revNo} as completed?`)) return;
-
-        try {
-            const endpoint = item.isRevision ? `${API_URL}/revs/mark-done` : `${API_URL}/irs/mark-done`;
-            const res = await fetch(endpoint, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ irNo: item.irNo || item.revNo }),
-            });
-
-            if (res.ok) {
-                showToast("Marked as completed!");
-                fetchData();
-            } else {
-                const data = await res.json();
-                throw new Error(data.error || "Mark failed");
-            }
-        } catch (err) {
-            console.error("Mark done error:", err);
-            showToast(`Mark failed: ${err.message}`);
-        }
-    };
-
-    // Format date with short month and proper formatting
-    const formatDate = (dateStr) => {
-        if (!dateStr) return "N/A";
-        try {
-            const date = new Date(dateStr);
-            if (isNaN(date)) return dateStr;
-            
-            // تنسيق: 31 Jan 2026, 12:56
-            return new Intl.DateTimeFormat("en-GB", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric"
-            }).format(date) + "\n" + 
-            new Intl.DateTimeFormat("en-GB", {
-                hour: "2-digit",
-                minute: "2-digit"
-            }).format(date);
-        } catch {
-            return dateStr;
-        }
-    };
-
-    // Format short date for grouping
-    const formatShortDate = (dateStr) => {
-        if (!dateStr) return "Unknown Date";
-        try {
-            const date = new Date(dateStr);
-            if (isNaN(date)) return dateStr;
-            
-            // تنسيق مختصر لعرض اسم من قام بالتنزيل
-            return new Intl.DateTimeFormat("en-GB", {
-                day: "2-digit",
-                month: "short"
-            }).format(date);
-        } catch {
-            return dateStr;
-        }
-    };
-
-    // Group items by date
-    const groupedItems = filteredItems.reduce((acc, item) => {
-        const dateKey = formatShortDate(item.sentAt || item.receivedDate || item.archivedAt);
-        if (!acc[dateKey]) acc[dateKey] = [];
-        acc[dateKey].push(item);
-        return acc;
-    }, {});
-
-    // Sort dates (newest first)
-    const sortedDates = Object.keys(groupedItems).sort((a, b) => {
-        return new Date(b) - new Date(a);
-    });
-
-    // Toast notification
-    const [toast, setToast] = useState("");
-    const showToast = (msg) => {
-        setToast(msg);
-        setTimeout(() => setToast(""), 3000);
-    };
-
-    // Get status badge class
-    const getStatusClass = (item) => {
-        if (item.isArchived) return "bg-gray-100 text-gray-800 border border-gray-300";
-        if (item.isDone) return "bg-green-100 text-green-800 border border-green-300";
-        return "bg-yellow-100 text-yellow-800 border border-yellow-300";
-    };
-
-    // Get type badge class
-    const getTypeClass = (item) => {
-        if (item.isRevision) {
-            return item.isCPR ? 
-                "bg-green-100 text-green-800 border border-green-300" :
-                "bg-purple-100 text-purple-800 border border-purple-300";
-        }
-        return item.isCPR ? 
-            "bg-green-100 text-green-800 border border-green-300" :
-            "bg-blue-100 text-blue-800 border border-blue-300";
-    };
-
-    // Get user badge class
-    const getUserClass = (item) => {
-        return item.user === user.username ? 
-            "bg-blue-100 text-blue-800" : 
-            "bg-gray-100 text-gray-800";
-    };
-
-    // Reset filters
-    const resetFilters = () => {
-        setProjectFilter("all");
-        setTypeFilter("all");
-        setDateFilter("all");
-        setStatusFilter("all");
-        setDepartmentFilter("all");
-    };
-
-    if (loading) {
-        return (
-            <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-                <div className="text-center">
-                    <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-                    <p className="text-gray-600">Loading records...</p>
-                </div>
-            </div>
-        );
     }
+    // دالة إضافة Tag مع Enter
+    const handleKeyPress = (e, type) => {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            if (type === 'engineer' && irInput.trim()) {
+                setIrTags(prev => [...prev, irInput.trim()]);
+                setIrInput("");
+            } else if (type === 'site' && sdInput.trim()) {
+                setSdTags(prev => [...prev, sdInput.trim()]);
+                setSdInput("");
+            }
+        }
+    };
+
+    // دالة إضافة Tag بالزر
+    const handleAddEngineerNote = () => {
+        if (irInput.trim()) {
+            setIrTags(prev => [...prev, irInput.trim()]);
+            setIrInput("");
+        }
+    };
+
+    const handleAddSiteDiaryNote = () => {
+        if (sdInput.trim()) {
+            setSdTags(prev => [...prev, sdInput.trim()]);
+            setSdInput("");
+        }
+    };
+
+    // إزالة وسم
+    const removeTag = (index, setTags) => {
+        setTags(prev => prev.filter((_, i) => i !== index));
+    };
 
     return (
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 p-4 md:p-8">
-            {/* Toast Notification */}
-            {toast && (
-                <div className="fixed top-5 right-5 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-top-5">
-                    {toast}
+        <div className="min-h-screen bg-gray-50 pb-20">
+            <div className="max-w-5xl mx-auto pt-8 px-4">
+
+                {/* Header Section */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-end mb-8 border-b pb-6 gap-4">
+                    <div>
+                        <h1 className="text-3xl font-bold text-gray-800">
+                            {requestType === "CPR" ? "🏗️ Concrete Pouring Request (ORC)" : "📝 Inspection Request (IR)"}
+                        </h1>
+                        <p className="text-gray-500 mt-1">
+                            Logged in as: <span className="font-semibold text-blue-600">{user.username}</span> ({department})
+                            {requestType === "CPR" && (
+                                <span className={`ml-2 ${isCivilEngineer ? "text-green-600" : "text-red-600"}`}>
+                                    {isCivilEngineer ? "✓ Civil Engineer" : "✗ Non-Civil"}
+                                </span>
+                            )}
+                        </p>
+                    </div>
+
+                    <div className="flex flex-col sm:flex-row gap-4">
+                        {/* نوع الطلب */}
+                        <div className="bg-white rounded-lg shadow-sm border p-1">
+                            <button
+                                onClick={() => switchRequestType("IR")}
+                                className={`px-4 py-2 rounded-md transition ${requestType === "IR" ? "bg-blue-600 text-white" : "hover:bg-gray-100 text-gray-600"}`}
+                            >
+                                IR
+                            </button>
+
+                            {isCivilEngineer && (
+                                <button
+                                    onClick={() => switchRequestType("CPR")}
+                                    className={`px-4 py-2 rounded-md transition ${requestType === "CPR" ? "bg-green-600 text-white" : "hover:bg-gray-100 text-gray-600"}`}
+                                >
+                                    CPR
+                                </button>
+                            )}
+                        </div>
+
+                        {/* زر إنشاء REV */}
+                        <button
+                            onClick={() => setShowRevModal(true)}
+                            className="bg-amber-500 hover:bg-amber-600 text-white px-6 py-2 rounded-lg font-bold shadow-md transition"
+                        >
+                            + Create REV
+                        </button>
+                    </div>
+                </div>
+
+                <div className="space-y-6">
+                    {/* Project Information */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h2 className="text-lg font-bold text-gray-700 mb-4 flex items-center gap-2">
+                            <span className="w-2 h-6 bg-blue-600 rounded-full"></span>
+                            {requestType === "CPR" ? "Concrete Pouring Information (ORC)" : "Inspection Request Information"}
+                        </h2>
+
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <SearchableInput
+                                label="Project Name"
+                                options={projects}
+                                value={selectedProject}
+                                onChange={setSelectedProject}
+                                placeholder="Select project..."
+                                loading={loadingProjects}
+                                disabled={loadingProjects}
+                            />
+
+                            <SearchableInput
+                                label="Location / Block"
+                                options={locations}
+                                value={selectedLocation}
+                                onChange={setSelectedLocation}
+                                placeholder={selectedProject ? "Select location..." : "Select project first"}
+                                disabled={!selectedProject || locations.length === 0}
+                                noOptionsMessage={selectedProject && locations.length === 0 ? "No locations found" : ""}
+                            />
+
+                            {requestType === "CPR" ? (
+                                <>
+                                    <SearchableInput
+                                        label="Concrete Pouring Element"
+                                        options={baseDescriptions}
+                                        value={generalDesc}
+                                        onChange={setGeneralDesc}
+                                        placeholder="Select concrete pouring element..."
+                                        disabled={!selectedProject}
+                                        noOptionsMessage={selectedProject && baseDescriptions.length === 0 ? "No elements available" : ""}
+                                    />
+
+                                </>
+                            ) : (
+                                <>
+                                    <SearchableInput
+                                        label="Work Description"
+                                        options={baseDescriptions}
+                                        value={generalDesc}
+                                        onChange={setGeneralDesc}
+                                        placeholder="Select work description..."
+                                        disabled={!selectedProject}
+                                        noOptionsMessage={selectedProject && baseDescriptions.length === 0 ? "No descriptions available" : ""}
+                                    />
+
+                                    <SearchableInput
+                                        label="Floor"
+                                        options={floors}
+                                        value={selectedFloor}
+                                        onChange={setSelectedFloor}
+                                        placeholder="Select floor..."
+                                        disabled={!selectedProject}
+                                        noOptionsMessage={selectedProject && floors.length === 0 ? "No floors available" : ""}
+                                    />
+                                </>
+                            )}
+                        </div>
+
+                        {/* تنبيه CPR فقط للمهندسين المدنيين */}
+                        {requestType === "CPR" && !isCivilEngineer && (
+                            <div className="mt-4 p-3 bg-red-50 border border-red-200 rounded-lg">
+                                <p className="text-red-700 text-sm font-medium">
+                                    ⚠️ ORC (CPR) requests are only available for Civil/Structure engineers.
+                                </p>
+                            </div>
+                        )}
+
+                        {/* Loading Indicator */}
+                        {loadingData && (
+                            <div className="mt-4 flex items-center justify-center p-2">
+                                <div className="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
+                                <span className="ml-2 text-sm text-gray-600">Loading data...</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* Tags Section */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <h2 className="text-lg font-bold text-gray-700 mb-4">Tags & Notes</h2>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    IR Attatch
+                                </label>
+                                <div className="flex gap-2 mb-2">
+                                    <input
+                                        type="text"
+                                        value={irInput}
+                                        onChange={(e) => setIrInput(e.target.value)}
+                                        onKeyPress={(e) => handleKeyPress(e, 'engineer')}
+                                        className="flex-1 p-2 border rounded-lg"
+                                        placeholder="Add IR Attatch"
+                                    />
+                                    <button
+                                        onClick={handleAddEngineerNote}
+                                        className="bg-blue-500 text-white px-3 py-2 rounded-lg hover:bg-blue-600 transition"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {irTags.map((tag, idx) => (
+                                        <span key={idx} className="bg-blue-100 text-blue-800 px-3 py-1 rounded-full text-sm flex items-center gap-1">
+                                            {tag}
+                                            <button
+                                                onClick={() => removeTag(idx, setIrTags)}
+                                                className="text-blue-600 hover:text-blue-800"
+                                            >
+                                                ×
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+
+                            <div>
+                                <label className="block text-sm font-medium text-gray-700 mb-2">
+                                    SD Attatch
+                                </label>
+                                <div className="flex gap-2 mb-2">
+                                    <input
+                                        type="text"
+                                        value={sdInput}
+                                        onChange={(e) => setSdInput(e.target.value)}
+                                        onKeyPress={(e) => handleKeyPress(e, 'site')}
+                                        className="flex-1 p-2 border rounded-lg"
+                                        placeholder="Add SD Attatch"
+                                    />
+                                    <button
+                                        onClick={handleAddSiteDiaryNote}
+                                        className="bg-green-500 text-white px-3 py-2 rounded-lg hover:bg-green-600 transition"
+                                    >
+                                        Add
+                                    </button>
+                                </div>
+                                <div className="flex flex-wrap gap-2">
+                                    {sdTags.map((tag, idx) => (
+                                        <span key={idx} className="bg-green-100 text-green-800 px-3 py-1 rounded-full text-sm flex items-center gap-1">
+                                            {tag}
+                                            <button
+                                                onClick={() => removeTag(idx, setSdTags)}
+                                                className="text-green-600 hover:text-green-800"
+                                            >
+                                                ×
+                                            </button>
+                                        </span>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Final Description */}
+                    <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
+                        <div className="flex justify-between items-center mb-2">
+                            <label className="block text-lg font-bold text-gray-700">
+                                Final Generated Description
+                            </label>
+                            <span className={`px-2 py-1 rounded text-xs font-bold ${requestType === "CPR" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}`}>
+                                {requestType === "CPR" ? "ORC" : requestType}
+                            </span>
+                        </div>
+                        <textarea
+                            className="w-full p-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg text-gray-700 font-medium"
+                            rows={3}
+                            value={finalDescription}
+                            onChange={(e) => setFinalDescription(e.target.value)}
+                            placeholder="Description will be generated automatically..."
+                        />
+                        <p className="text-xs text-gray-400 mt-2 italic">
+                            * You can manually edit the final text if needed
+                        </p>
+                    </div>
+
+                    {/* Submit Button */}
+                    <button
+                        onClick={handleSave}
+                        disabled={saving || !selectedProject || !selectedLocation || !generalDesc || (requestType === "IR" && !selectedFloor)}
+                        className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg transition-all ${saving || !selectedProject || !selectedLocation || !generalDesc || (requestType === "IR" && !selectedFloor)
+                            ? "bg-gray-400 cursor-not-allowed"
+                            : requestType === "CPR"
+                                ? "bg-green-600 hover:bg-green-700 hover:-translate-y-1"
+                                : "bg-blue-600 hover:bg-blue-700 hover:-translate-y-1"
+                            }`}
+                    >
+                        {saving ? (
+                            <span className="flex items-center justify-center gap-2">
+                                <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                                Processing...
+                            </span>
+                        ) : requestType === "CPR" ? (
+                            "Submit ORC (CPR) Request"
+                        ) : (
+                            "Submit Inspection Request"
+                        )}
+                    </button>
+                </div>
+            </div>
+
+            {/* Revision Modal */}
+            {showRevModal && (
+                <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
+                    <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">
+                        <div className="bg-amber-500 p-4 text-white flex justify-between items-center">
+                            <h2 className="text-xl font-bold">Create New Revision (REV)</h2>
+                            <button
+                                onClick={() => setShowRevModal(false)}
+                                className="text-2xl hover:opacity-70"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        <div className="p-6 space-y-4">
+                            <SearchableInput
+                                label="Select Project"
+                                options={projects}
+                                value={revProject}
+                                onChange={setRevProject}
+                            />
+                            <div>
+                                <label className="block font-bold text-gray-700 mb-1 text-sm">
+                                    IR No
+                                </label>
+                                <input
+                                    type="text"
+                                    value={revText}
+                                    onChange={(e) => setRevText(e.target.value)}
+                                    className="w-full border-2 border-gray-200 rounded-lg p-3 focus:border-amber-500 outline-none"
+                                    placeholder="أدخل رقم المراجعة (مثل: R1, R2, 001...)"
+                                    required
+                                />
+
+                            </div>
+                            <div>
+                                <label className="block font-bold text-gray-700 mb-1 text-sm">
+                                    Additional Notes
+                                </label>
+                                <textarea
+                                    value={revNote}
+                                    onChange={(e) => setRevNote(e.target.value)}
+                                    className="w-full border-2 border-gray-200 rounded-lg p-3 focus:border-amber-500 outline-none"
+                                    rows={2}
+                                    placeholder="Any additional details..."
+                                />
+                            </div>
+                            <button
+                                onClick={handleSaveRev}
+                                disabled={revSaving || !revProject || !revText.trim()}
+                                className="w-full py-3 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded-lg transition disabled:bg-gray-300"
+                            >
+                                {revSaving ? "Creating..." : "Submit Revision"}
+                            </button>
+                        </div>
+                    </div>
                 </div>
             )}
-
-            <div className="max-w-7xl mx-auto">
-                {/* Header */}
-                <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-8 gap-6">
-                    <div>
-                        <h1 className="text-3xl md:text-4xl font-bold text-gray-800">
-                            📋 My Records Dashboard
-                        </h1>
-                        <p className="text-gray-600 mt-2">
-                            Welcome back, <span className="font-semibold text-blue-600">{user.username}</span>
-                            <span className="mx-2">•</span>
-                            Role: <span className="font-semibold text-blue-600 capitalize">{user.role}</span>
-                            <span className="mx-2">•</span>
-                            Department: <span className="font-semibold text-blue-600">{user.department}</span>
-                        </p>
-                    </div>
-
-                    <div className="flex items-center gap-4">
-                        <button
-                            onClick={fetchData}
-                            className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition flex items-center gap-2"
-                        >
-                            🔄 Refresh
-                        </button>
-                    </div>
-                </div>
-
-                {/* Tabs */}
-                <div className="bg-white rounded-xl shadow-sm border mb-6 overflow-hidden">
-                    <div className="flex flex-col md:flex-row border-b">
-                        <button
-                            onClick={() => setTab("personal")}
-                            className={`flex-1 py-4 text-center font-medium transition-colors ${tab === "personal" ? "bg-blue-50 text-blue-700 border-b-2 border-blue-600" : "text-gray-600 hover:bg-gray-50"}`}
-                        >
-                            <span className="flex items-center justify-center gap-2">
-                                👤 My Requests ({stats.personal.total})
-                            </span>
-                        </button>
-                        
-                        {(user.role === "head" || user.role === "admin") && (
-                            <button
-                                onClick={() => setTab("department")}
-                                className={`flex-1 py-4 text-center font-medium transition-colors ${tab === "department" ? "bg-blue-50 text-blue-700 border-b-2 border-blue-600" : "text-gray-600 hover:bg-gray-50"}`}
-                            >
-                                <span className="flex items-center justify-center gap-2">
-                                    🏢 My Department ({stats.department.total})
-                                </span>
-                            </button>
-                        )}
-                        
-                        {user.role === "admin" && (
-                            <button
-                                onClick={() => setTab("all")}
-                                className={`flex-1 py-4 text-center font-medium transition-colors ${tab === "all" ? "bg-blue-50 text-blue-700 border-b-2 border-blue-600" : "text-gray-600 hover:bg-gray-50"}`}
-                            >
-                                <span className="flex items-center justify-center gap-2">
-                                    📊 All Requests ({stats.all.total})
-                                </span>
-                            </button>
-                        )}
-                    </div>
-                </div>
-
-                {/* Stats Cards */}
-                <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-6">
-                    <div className="bg-white rounded-xl shadow p-4 text-center">
-                        <div className="text-2xl font-bold text-gray-800">{filteredItems.length}</div>
-                        <div className="text-sm text-gray-500">Showing</div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow p-4 text-center">
-                        <div className="text-2xl font-bold text-yellow-600">
-                            {filteredItems.filter(item => !item.isDone && !item.isArchived).length}
-                        </div>
-                        <div className="text-sm text-gray-500">Pending</div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow p-4 text-center">
-                        <div className="text-2xl font-bold text-green-600">
-                            {filteredItems.filter(item => item.isDone || item.isArchived).length}
-                        </div>
-                        <div className="text-sm text-gray-500">Completed</div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow p-4 text-center">
-                        <div className="text-2xl font-bold text-blue-600">
-                            {filteredItems.filter(item => !item.isCPR && !item.isRevision).length}
-                        </div>
-                        <div className="text-sm text-gray-500">IR</div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow p-4 text-center">
-                        <div className="text-2xl font-bold text-green-600">
-                            {filteredItems.filter(item => item.isCPR && !item.isRevision).length}
-                        </div>
-                        <div className="text-sm text-gray-500">CPR</div>
-                    </div>
-                    <div className="bg-white rounded-xl shadow p-4 text-center">
-                        <div className="text-2xl font-bold text-purple-600">
-                            {filteredItems.filter(item => item.isRevision).length}
-                        </div>
-                        <div className="text-sm text-gray-500">Revisions</div>
-                    </div>
-                </div>
-
-                {/* Filters Section */}
-                <div className="bg-white rounded-xl shadow-sm border p-6 mb-6">
-                    <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-                        <h3 className="text-lg font-bold text-gray-800">🎯 Filters</h3>
-                        <button
-                            onClick={resetFilters}
-                            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm"
-                        >
-                            Reset All Filters
-                        </button>
-                    </div>
-                    
-                    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                        {/* Project Filter */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Project
-                            </label>
-                            <select
-                                value={projectFilter}
-                                onChange={(e) => setProjectFilter(e.target.value)}
-                                className="w-full p-2 border rounded-lg bg-white"
-                            >
-                                <option value="all">All Projects</option>
-                                {projects.map(project => (
-                                    <option key={project} value={project}>{project}</option>
-                                ))}
-                            </select>
-                        </div>
-                        
-                        {/* Type Filter */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Type
-                            </label>
-                            <select
-                                value={typeFilter}
-                                onChange={(e) => setTypeFilter(e.target.value)}
-                                className="w-full p-2 border rounded-lg bg-white"
-                            >
-                                <option value="all">All Types</option>
-                                <option value="ir">IR Only</option>
-                                <option value="cpr">CPR Only</option>
-                                <option value="revision">Revisions Only</option>
-                            </select>
-                        </div>
-                        
-                        {/* Date Filter */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Date Range
-                            </label>
-                            <select
-                                value={dateFilter}
-                                onChange={(e) => setDateFilter(e.target.value)}
-                                className="w-full p-2 border rounded-lg bg-white"
-                            >
-                                <option value="all">All Dates</option>
-                                <option value="today">Today</option>
-                                <option value="week">Last 7 Days</option>
-                                <option value="month">Last 30 Days</option>
-                            </select>
-                        </div>
-                        
-                        {/* Status Filter */}
-                        <div>
-                            <label className="block text-sm font-medium text-gray-700 mb-1">
-                                Status
-                            </label>
-                            <select
-                                value={statusFilter}
-                                onChange={(e) => setStatusFilter(e.target.value)}
-                                className="w-full p-2 border rounded-lg bg-white"
-                            >
-                                <option value="all">All Status</option>
-                                <option value="pending">Pending</option>
-                                <option value="completed">Completed</option>
-                            </select>
-                        </div>
-                        
-                        {/* Department Filter (for admin) */}
-                        {user.role === "admin" && (
-                            <div>
-                                <label className="block text-sm font-medium text-gray-700 mb-1">
-                                    Department
-                                </label>
-                                <select
-                                    value={departmentFilter}
-                                    onChange={(e) => setDepartmentFilter(e.target.value)}
-                                    className="w-full p-2 border rounded-lg bg-white"
-                                >
-                                    <option value="all">All Departments</option>
-                                    {departments.map(dept => (
-                                        <option key={dept} value={dept}>{dept}</option>
-                                    ))}
-                                </select>
-                            </div>
-                        )}
-                    </div>
-                </div>
-
-                {/* Content */}
-                {error ? (
-                    <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-center">
-                        <div className="text-red-500 text-4xl mb-3">⚠️</div>
-                        <h3 className="text-lg font-semibold text-red-700 mb-2">Error Loading Data</h3>
-                        <p className="text-red-600 mb-4">{error}</p>
-                        <button
-                            onClick={fetchData}
-                            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium"
-                        >
-                            Retry
-                        </button>
-                    </div>
-                ) : filteredItems.length === 0 ? (
-                    <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center shadow-sm">
-                        <div className="text-gray-400 text-6xl mb-4">
-                            📭
-                        </div>
-                        <h3 className="text-xl font-semibold text-gray-700 mb-2">
-                            No Records Found
-                        </h3>
-                        <p className="text-gray-500 mb-4">
-                            No records match your current filters. Try adjusting your search criteria.
-                        </p>
-                        <button
-                            onClick={resetFilters}
-                            className="mt-4 px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
-                        >
-                            Reset Filters
-                        </button>
-                    </div>
-                ) : (
-                    <div className="space-y-8">
-                        {sortedDates.map(dateKey => (
-                            <div key={dateKey} className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden">
-                                {/* Date Header */}
-                                <div className="bg-gradient-to-r from-gray-800 to-gray-700 text-white p-6">
-                                    <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                                        <div>
-                                            <h2 className="text-2xl font-bold flex items-center gap-3">
-                                                📅 {dateKey}
-                                            </h2>
-                                            <p className="text-gray-300 mt-1">
-                                                {groupedItems[dateKey].length} request{groupedItems[dateKey].length !== 1 ? 's' : ''}
-                                            </p>
-                                        </div>
-                                        <div className="flex flex-wrap gap-2">
-                                            <span className="px-3 py-1 bg-gray-600/50 text-white rounded-full text-sm">
-                                                Pending: {groupedItems[dateKey].filter(x => !x.isDone && !x.isArchived).length}
-                                            </span>
-                                            <span className="px-3 py-1 bg-green-600/50 text-white rounded-full text-sm">
-                                                Completed: {groupedItems[dateKey].filter(x => x.isDone || x.isArchived).length}
-                                            </span>
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Table */}
-                                <div className="overflow-x-auto">
-                                    <table className="w-full">
-                                        <thead>
-                                            <tr className="bg-gray-50 text-gray-700 border-b">
-                                                <th className="p-4 text-left font-semibold">ID / Number</th>
-                                                <th className="p-4 text-left font-semibold">Description</th>
-                                                <th className="p-4 text-left font-semibold">Type</th>
-                                                <th className="p-4 text-left font-semibold">User</th>
-                                                <th className="p-4 text-left font-semibold">Department</th>
-                                                <th className="p-4 text-left font-semibold">Time</th>
-                                                <th className="p-4 text-left font-semibold">Status</th>
-                                                <th className="p-4 text-left font-semibold">Actions</th>
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {groupedItems[dateKey].map((item, idx) => (
-                                                <tr
-                                                    key={item.irNo || item.revNo || idx}
-                                                    className="border-b hover:bg-gray-50 transition-colors"
-                                                >
-                                                    <td className="p-4">
-                                                        <div className="font-mono font-semibold text-gray-800">
-                                                            {item.irNo || item.revNo}
-                                                        </div>
-                                                        <div className="text-xs text-gray-500 mt-1">
-                                                            Project: {item.project}
-                                                        </div>
-                                                    </td>
-
-                                                    <td className="p-4">
-                                                        <div className="text-gray-700 font-medium">
-                                                            {item.desc || item.revNote || "No description"}
-                                                        </div>
-                                                        <div className="text-xs text-gray-500 mt-1">
-                                                            {item.location && `Location: ${item.location}`}
-                                                            {item.floor && ` • Floor: ${item.floor}`}
-                                                        </div>
-                                                    </td>
-
-                                                    <td className="p-4">
-                                                        <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${getTypeClass(item)}`}>
-                                                            {item.type}
-                                                        </span>
-                                                    </td>
-
-                                                    <td className="p-4">
-                                                        <span className={`px-2 py-1 rounded text-xs font-medium ${getUserClass(item)}`}>
-                                                            {item.user}
-                                                        </span>
-                                                    </td>
-
-                                                    <td className="p-4">
-                                                        <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs font-medium">
-                                                            {item.department}
-                                                        </span>
-                                                    </td>
-
-                                                    <td className="p-4">
-                                                        <div className="text-gray-600 whitespace-pre-line">
-                                                            {formatDate(item.sentAt || item.receivedDate)}
-                                                        </div>
-                                                        {item.archivedAt && (
-                                                            <div className="text-xs text-amber-600 mt-1">
-                                                                Archived: {formatShortDate(item.archivedAt)}
-                                                            </div>
-                                                        )}
-                                                    </td>
-
-                                                    <td className="p-4">
-                                                        <div className="space-y-2">
-                                                            <span className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${getStatusClass(item)}`}>
-                                                                {item.isArchived ? (
-                                                                    <>
-                                                                        <span>📁</span> Archived
-                                                                    </>
-                                                                ) : item.isDone ? (
-                                                                    <>
-                                                                        <span>✓</span> Completed
-                                                                    </>
-                                                                ) : (
-                                                                    "Pending"
-                                                                )}
-                                                            </span>
-                                                            
-                                                            {/* إظهار اسم من قام بتنزيل ملف Word */}
-                                                            {item.downloadedBy && (
-                                                                <div className="mt-1 text-xs text-gray-600 bg-gray-50 p-2 rounded">
-                                                                    <span className="font-medium">📄 Downloaded by:</span> {item.downloadedBy}
-                                                                    {item.downloadedAt && (
-                                                                        <div className="text-gray-500 mt-1">
-                                                                            on {formatShortDate(item.downloadedAt)}
-                                                                        </div>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </td>
-
-                                                    <td className="p-4">
-                                                        <div className="flex flex-col gap-2 min-w-[180px]">
-                                                            <div className="flex gap-2">
-                                                                <button
-                                                                    onClick={() => handleViewDetails(item)}
-                                                                    className="flex-1 px-3 py-1.5 bg-blue-50 hover:bg-blue-100 text-blue-700 rounded-lg text-sm font-medium transition"
-                                                                >
-                                                                    View
-                                                                </button>
-                                                                <button
-                                                                    onClick={() => handleCopyToClipboard(item)}
-                                                                    className="flex-1 px-3 py-1.5 bg-gray-50 hover:bg-gray-100 text-gray-700 rounded-lg text-sm font-medium transition"
-                                                                >
-                                                                    Copy
-                                                                </button>
-                                                            </div>
-                                                            
-                                                            {item.user === user.username && (
-                                                                <div className="flex gap-2">
-                                                                    {item.isArchived ? (
-                                                                        <button
-                                                                            onClick={() => handleUnarchive(item)}
-                                                                            className="flex-1 px-3 py-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-700 rounded-lg text-sm font-medium transition"
-                                                                        >
-                                                                            Restore
-                                                                        </button>
-                                                                    ) : !item.isDone ? (
-                                                                        <>
-                                                                            <button
-                                                                                onClick={() => handleMarkDone(item)}
-                                                                                className="flex-1 px-3 py-1.5 bg-green-50 hover:bg-green-100 text-green-700 rounded-lg text-sm font-medium transition"
-                                                                            >
-                                                                                Mark Done
-                                                                            </button>
-                                                                            <button
-                                                                                onClick={() => handleArchive(item)}
-                                                                                className="flex-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-sm font-medium transition"
-                                                                            >
-                                                                                Archive
-                                                                            </button>
-                                                                        </>
-                                                                    ) : (
-                                                                        <button
-                                                                            onClick={() => handleArchive(item)}
-                                                                            className="flex-1 px-3 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded-lg text-sm font-medium transition"
-                                                                        >
-                                                                            Archive
-                                                                        </button>
-                                                                    )}
-                                                                </div>
-                                                            )}
-                                                        </div>
-                                                    </td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
-                            </div>
-                        ))}
-                    </div>
-                )}
-            </div>
         </div>
     );
 }

@@ -1,9 +1,14 @@
 // src/pages/DcPage.jsx
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback, memo } from "react";
 import { copyRow, copyAllRows } from "../firebaseService";
 import { API_URL } from "../config";
 import { useNavigate } from "react-router-dom";
-import SidebarComponent from "../components/SidebarComponent";
+import { 
+    formatIrNumber, 
+    formatDateShort, 
+    getDepartmentAbbr,
+    extractTime
+} from "../utils/formatters";
 
 export default function DcPage() {
     const navigate = useNavigate();
@@ -14,17 +19,10 @@ export default function DcPage() {
     const [savingSerials, setSavingSerials] = useState({});
     const [downloadedIRs, setDownloadedIRs] = useState(new Set());
     const [searchTerm, setSearchTerm] = useState("");
+    const [error, setError] = useState(null);
 
-    // فلاتر الـ Sidebar
-    const [sidebarFilters, setSidebarFilters] = useState({
-        project: "all",
-        department: "all",
-        type: "all",
-        status: "all"
-    });
-
-    // Advanced Filters
-    const [advancedFilters, setAdvancedFilters] = useState({
+    // Advanced Filters only (no more sidebar)
+    const [filters, setFilters] = useState({
         project: "all",
         type: "all",
         status: "all",
@@ -39,17 +37,6 @@ export default function DcPage() {
             navigate("/login");
         }
     }, [navigate]);
-
-    function normalizeDept(dept) {
-        if (!dept) return "UNKNOWN";
-        const d = String(dept).toUpperCase().replace(/[^A-Z]/g, "");
-        if (d.includes("ARCH")) return "ARCH";
-        if (d.includes("CIVIL") || d.includes("STRUCTURE")) return "ST";
-        if (d.includes("ELECT")) return "ELECT";
-        if (d.includes("MEP") || d.includes("MECHAN")) return "MEP";
-        if (d.includes("SURV")) return "SURVEY";
-        return d;
-    }
 
     async function parseJsonSafe(response) {
         const ct = response.headers.get("content-type") || "";
@@ -67,13 +54,17 @@ export default function DcPage() {
     }
 
     // دالة إعادة تحميل البيانات
-    async function loadAllData() {
+    const loadAllData = useCallback(async () => {
         setLoading(true);
+        setError(null);
         try {
             const [resIrs, resRevs] = await Promise.all([
                 fetch(`${API_URL}/irs`),
                 fetch(`${API_URL}/revs`)
             ]);
+
+            if (!resIrs.ok) throw new Error(`Failed to load IRs: ${resIrs.status}`);
+            if (!resRevs.ok) throw new Error(`Failed to load Revisions: ${resRevs.status}`);
 
             const dataIrs = await parseJsonSafe(resIrs);
             const dataRevs = await parseJsonSafe(resRevs);
@@ -89,7 +80,8 @@ export default function DcPage() {
                 floor: ir.floor || "",
                 concreteGrade: ir.concreteGrade || "",
                 pouringElement: ir.pouringElement || "",
-                tags: ir.tags || { engineer: [], sd: [] }
+                tags: ir.tags || { engineer: [], sd: [] },
+                departmentAbbr: getDepartmentAbbr(ir.department)
             }));
 
             // معالجة Revisions
@@ -109,7 +101,7 @@ export default function DcPage() {
                 downloadedBy: rev.downloadedBy || "",
                 downloadedAt: rev.downloadedAt || "",
                 isDone: rev.isDone || false,
-                // ⭐⭐ حقول جديدة للمراجعات ⭐⭐
+                departmentAbbr: getDepartmentAbbr(rev.department),
                 userRevNumber: rev.userRevNumber || rev.revText,
                 displayNumber: rev.displayNumber ||
                     (rev.userRevNumber ?
@@ -132,102 +124,23 @@ export default function DcPage() {
             });
             setCustomNumbers(map);
 
+            setError(null);
         } catch (err) {
             console.error("Load error:", err);
+            setError("Failed to load data. Please try again.");
             showToast("Failed to load data");
         } finally {
             setLoading(false);
         }
-    }
-
-    // Load all data
-    useEffect(() => {
-        loadAllData();
-
-        // إعادة تحميل كل 30 ثانية فقط (إزالة إعادة التحميل الفوري)
-        const interval = setInterval(() => {
-            if (!loading) {
-                loadAllData();
-            }
-        }, 30000);
-
-        return () => clearInterval(interval);
     }, []);
 
+    // Load all data once
+    useEffect(() => {
+        loadAllData();
+    }, [loadAllData]);
+
     // 🔧 Helper Functions
-    const formatDateShort = (dateStr) => {
-        if (!dateStr) return "—";
-        try {
-            if (dateStr.includes("Jan") || dateStr.includes("Feb") || dateStr.includes("Mar")) {
-                const parts = dateStr.split(" ");
-                if (parts.length >= 3) {
-                    return `${parts[0]} ${parts[1]}\n${parts[2]}`;
-                }
-                return dateStr;
-            }
-            const date = new Date(dateStr);
-            if (isNaN(date)) return dateStr;
-            return new Intl.DateTimeFormat("en-GB", {
-                day: "2-digit",
-                month: "short"
-            }).format(date) + "\n" +
-                new Intl.DateTimeFormat("en-GB", {
-                    hour: "2-digit",
-                    minute: "2-digit"
-                }).format(date);
-        } catch {
-            return dateStr;
-        }
-    };
-
-    const formatShortDate = (dateStr) => {
-        if (!dateStr) return "";
-        try {
-            if (dateStr.includes("Jan") || dateStr.includes("Feb") || dateStr.includes("Mar")) {
-                const parts = dateStr.split(" ");
-                if (parts.length >= 3) return `${parts[0]} ${parts[1]}`;
-                return dateStr;
-            }
-            const date = new Date(dateStr);
-            if (isNaN(date)) return dateStr;
-            return new Intl.DateTimeFormat("en-GB", {
-                day: "2-digit",
-                month: "short"
-            }).format(date);
-        } catch {
-            return dateStr;
-        }
-    };
-
-    const getDeptAbbr = (department) => {
-        if (!department) return "UNK";
-        const dept = department.toUpperCase();
-        if (dept.includes("ARCH")) return "ARCH";
-        if (dept.includes("CIVIL") || dept.includes("STRUCT")) return "CIVIL";
-        if (dept.includes("ELECT")) return "ELEC";
-        if (dept.includes("MEP") || dept.includes("MECH")) return "MEP";
-        if (dept.includes("SURV")) return "SURV";
-        return dept.substring(0, 4);
-    };
-
-    const extractTime = (dateStr) => {
-        if (!dateStr) return "Unknown";
-        try {
-            if (dateStr.includes(":")) {
-                const parts = dateStr.split(" ");
-                if (parts.length >= 3) return `${parts[1]} ${parts[2]}`;
-                return dateStr;
-            } else {
-                const date = new Date(dateStr);
-                if (isNaN(date)) return dateStr;
-                return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: true });
-            }
-        } catch {
-            return dateStr;
-        }
-    };
-
-    const getRevDisplayNumber = (rev) => {
+    const getRevDisplayNumber = useCallback((rev) => {
         if (!rev) return "REV";
         if (rev.displayNumber) return rev.displayNumber;
         if (rev.userRevNumber) {
@@ -239,80 +152,82 @@ export default function DcPage() {
             return `${prefix}${rev.revText}`;
         }
         return rev.revNo || "REV";
-    };
+    }, []);
 
-    const getRevTypeClass = (rev) => {
+    const getRevTypeClass = useCallback((rev) => {
         if (!rev) return "bg-gray-100 text-gray-800";
         if (rev.revisionType === "CPR_REVISION" || rev.isCPRRevision) {
             return "bg-green-200 text-green-800";
         } else {
             return "bg-amber-200 text-amber-800";
         }
-    };
+    }, []);
 
-    const getRevTypeText = (rev) => {
+    const getRevTypeText = useCallback((rev) => {
         if (!rev) return "REVISION";
         if (rev.revisionType === "CPR_REVISION" || rev.isCPRRevision) {
             return "CPR REV";
         } else {
             return "IR REV";
         }
-    };
+    }, []);
+
+    const getStatusClass = useCallback((item) => {
+        if (item.isDone) return "bg-emerald-100 text-emerald-800";
+        if (item.isRevision) return "bg-amber-100 text-amber-800";
+        return "bg-yellow-100 text-yellow-800";
+    }, []);
+
+    const getTypeClass = useCallback((item) => {
+        if (item.isRevision) {
+            if (item.revisionType === "CPR_REVISION" || item.isCPRRevision) {
+                return "bg-green-100 text-green-800";
+            }
+            return "bg-purple-100 text-purple-800";
+        }
+        if (item.isCPR || item.requestType === "CPR") return "bg-green-100 text-green-800";
+        return "bg-blue-100 text-blue-800";
+    }, []);
+
+    const getTodayDateStr = useCallback(() => {
+        const now = new Date();
+        return now.toLocaleDateString('en-GB', {
+            day: '2-digit',
+            month: 'short',
+            year: 'numeric'
+        }).replace(/ /g, ' ');
+    }, []);
 
     // Filter and search logic
     const filteredIRs = irs.filter(ir => {
-        // Filter by project from Sidebar
-        if (sidebarFilters.project !== "all" && ir.project !== sidebarFilters.project) return false;
+        // Filter by project
+        if (filters.project !== "all" && ir.project !== filters.project) return false;
 
-        // Filter by department from Sidebar
-        if (sidebarFilters.department !== "all") {
-            const dept = normalizeDept(ir.department);
-            if (dept !== sidebarFilters.department) return false;
+        // Filter by type
+        if (filters.type !== "all") {
+            if (filters.type === "ir" && (ir.isCPR || ir.isRevision)) return false;
+            if (filters.type === "cpr" && (!ir.isCPR || ir.isRevision)) return false;
+            if (filters.type === "revision" && !ir.isRevision) return false;
         }
 
-        // Filter by type from Sidebar
-        if (sidebarFilters.type !== "all") {
-            if (sidebarFilters.type === "ir") {
-                if (ir.isCPR || (ir.isRevision && ir.revisionType === "CPR_REVISION")) return false;
-            }
-            if (sidebarFilters.type === "cpr") {
-                if (ir.isRevision) {
-                    if (ir.revisionType !== "CPR_REVISION") return false;
-                } else {
-                    if (!ir.isCPR) return false;
-                }
-            }
-            if (sidebarFilters.type === "revision" && !ir.isRevision) return false;
+        // Filter by status
+        if (filters.status !== "all") {
+            if (filters.status === "pending" && ir.isDone) return false;
+            if (filters.status === "completed" && !ir.isDone) return false;
         }
 
-        // Filter by status from Sidebar
-        if (sidebarFilters.status !== "all") {
-            if (sidebarFilters.status === "pending" && ir.isDone) return false;
-            if (sidebarFilters.status === "completed" && !ir.isDone) return false;
+        // Filter by department
+        if (filters.department !== "all") {
+            const dept = getDepartmentAbbr(ir.department);
+            if (dept !== filters.department) return false;
         }
-
-        // Advanced Filters
-        if (advancedFilters.project !== "all" && ir.project !== advancedFilters.project) return false;
-
-        if (advancedFilters.type !== "all") {
-            if (advancedFilters.type === "ir" && (ir.isCPR || ir.isRevision)) return false;
-            if (advancedFilters.type === "cpr" && (!ir.isCPR || ir.isRevision)) return false;
-            if (advancedFilters.type === "revision" && !ir.isRevision) return false;
-        }
-
-        if (advancedFilters.status !== "all") {
-            if (advancedFilters.status === "pending" && ir.isDone) return false;
-            if (advancedFilters.status === "completed" && !ir.isDone) return false;
-        }
-
-        if (advancedFilters.department !== "all" && ir.department !== advancedFilters.department) return false;
 
         // Filter by date range
-        if (advancedFilters.dateRange !== "all") {
+        if (filters.dateRange !== "all") {
             const itemDate = new Date(ir.sentAt || ir.receivedDate);
             const today = new Date();
 
-            switch (advancedFilters.dateRange) {
+            switch (filters.dateRange) {
                 case "today":
                     if (itemDate.toDateString() !== today.toDateString()) return false;
                     break;
@@ -333,14 +248,18 @@ export default function DcPage() {
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             const irNumber = formatIrNumber(ir.irNo).toLowerCase();
+            const revNumber = ir.isRevision ? getRevDisplayNumber(ir).toLowerCase() : "";
+            
             return (
                 irNumber.includes(term) ||
+                revNumber.includes(term) ||
                 (ir.desc && ir.desc.toLowerCase().includes(term)) ||
                 (ir.project && ir.project.toLowerCase().includes(term)) ||
                 (ir.user && ir.user.toLowerCase().includes(term)) ||
                 (ir.floor && ir.floor.toLowerCase().includes(term)) ||
                 (ir.concreteGrade && ir.concreteGrade.toLowerCase().includes(term)) ||
-                (ir.downloadedBy && ir.downloadedBy.toLowerCase().includes(term))
+                (ir.downloadedBy && ir.downloadedBy.toLowerCase().includes(term)) ||
+                (ir.location && ir.location.toLowerCase().includes(term))
             );
         }
 
@@ -351,14 +270,14 @@ export default function DcPage() {
     const grouped = {};
     filteredIRs.forEach(ir => {
         const project = ir.project || "UNKNOWN";
-        const deptKey = normalizeDept(ir.department);
+        const deptKey = getDepartmentAbbr(ir.department);
         if (!grouped[project]) grouped[project] = {};
         if (!grouped[project][deptKey]) grouped[project][deptKey] = [];
         grouped[project][deptKey].push(ir);
     });
 
     // 🛠️ Action Handlers
-    async function handleArchive(irNo) {
+    const handleArchive = useCallback(async (irNo) => {
         const item = irs.find((x) => x.irNo === irNo || x.revNo === irNo);
         if (!item) return showToast("Item not found");
 
@@ -383,7 +302,7 @@ export default function DcPage() {
             const json = await parseJsonSafe(res);
             if (!res.ok) throw new Error(json.error || "Archive failed");
 
-            // تحديث الـ state محلياً دون إعادة تحميل كامل
+            // تحديث الـ state محلياً
             setIRs((prev) => prev.filter((x) => x.irNo !== irNo && x.revNo !== irNo));
             
             // تحديث custom numbers
@@ -399,9 +318,9 @@ export default function DcPage() {
             console.error("Archive failed:", err);
             showToast(`❌ Archive failed: ${err.message}`);
         }
-    }
+    }, [irs]);
 
-    async function markRevDone(irNo) {
+    const markRevDone = useCallback(async (irNo) => {
         if (!window.confirm(`Mark revision ${formatIrNumber(irNo)} as done?`)) return;
 
         try {
@@ -435,9 +354,9 @@ export default function DcPage() {
             console.error("markRevDone error:", err);
             showToast(`❌ Error: ${err.message}`);
         }
-    }
+    }, []);
 
-    async function handleCopy(ir) {
+    const handleCopy = useCallback(async (ir) => {
         try {
             await copyRow(ir);
             showToast("✔ Copied!");
@@ -445,9 +364,9 @@ export default function DcPage() {
             console.error("copy error:", err);
             showToast("Copy failed");
         }
-    }
+    }, []);
 
-    async function handleCopyAll(list) {
+    const handleCopyAll = useCallback(async (list) => {
         try {
             const filtered = list.filter((ir) => !ir.isRevision);
             await copyAllRows(filtered);
@@ -456,18 +375,9 @@ export default function DcPage() {
             console.error("copyAll error:", err);
             showToast("Copy all failed");
         }
-    }
+    }, []);
 
-    function getTodayDateStr() {
-        const now = new Date();
-        return now.toLocaleDateString('en-GB', {
-            day: '2-digit',
-            month: 'short',
-            year: 'numeric'
-        }).replace(/ /g, ' ');
-    }
-
-    async function markItemAsDone(item, newIrNo = null) {
+    const markItemAsDone = useCallback(async (item, newIrNo = null) => {
         const irNoToUse = newIrNo || item.irNo;
 
         try {
@@ -518,9 +428,9 @@ export default function DcPage() {
             console.error("Mark as done error:", err);
             showToast(`⚠️ File downloaded but failed to mark as done: ${err.message}`);
         }
-    }
+    }, []);
 
-    async function handleDownloadWord(ir) {
+    const handleDownloadWord = useCallback(async (ir) => {
         if (ir.isRevision) {
             showToast("REV items don't have Word files");
             return;
@@ -602,9 +512,9 @@ export default function DcPage() {
             console.error("Download failed:", err);
             showToast(`❌ Download failed: ${err.message}`);
         }
-    }
+    }, [customNumbers, getTodayDateStr, markItemAsDone]);
 
-    async function handleConfirmSerial(ir) {
+    const handleConfirmSerial = useCallback(async (ir) => {
         if (ir.isRevision) {
             showToast("Cannot update revision numbers");
             return;
@@ -636,12 +546,11 @@ export default function DcPage() {
         try {
             const user = JSON.parse(localStorage.getItem("user") || "null");
 
-            // تحديث الرقم في قاعدة البيانات - استخدام المسار الصحيح
             const res = await fetch(`${API_URL}/irs/update-ir-number`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    irNo: ir.irNo, // الرقم القديم
+                    irNo: ir.irNo,
                     newSerial: numericSerial,
                     role: user?.role || "dc",
                     project: ir.project,
@@ -654,23 +563,34 @@ export default function DcPage() {
             if (!res.ok) throw new Error(json.error || "Failed to update IR number");
 
             // تحديث الرقم في الـ state محلياً
-            const cleanProject = ir.project.replace(" ", "-").upperCase?.() || ir.project;
-            const deptCode = normalizeDept(ir.department);
+            const cleanProject = ir.project.replace(/ /g, "-").toUpperCase();
+            const deptCode = getDepartmentAbbr(ir.department);
             
             let newIrNo;
-            if (ir.requestType === "CPR") {
+            if (ir.requestType === "CPR" || ir.isCPR) {
                 newIrNo = `BADYA-CON-${cleanProject}-CPR-${numericSerial.toString().padStart(3, '0')}`;
             } else {
                 newIrNo = `BADYA-CON-${cleanProject}-IR-${deptCode}-${numericSerial.toString().padStart(3, '0')}`;
             }
 
-            // تحديث IRs في الـ state
+            // تحديث IRs في الـ state دون إعادة إنشاء المصفوفة
             setIRs(prev => 
-                prev.map(item => 
-                    item.irNo === ir.irNo 
-                        ? { ...item, irNo: newIrNo }
-                        : item
-                )
+                prev.map(item => {
+                    if (item.irNo === ir.irNo) {
+                        return { 
+                            ...item, 
+                            irNo: newIrNo,
+                            desc: item.desc || '',
+                            project: item.project || '',
+                            department: item.department || '',
+                            user: item.user || '',
+                            sentAt: item.sentAt || '',
+                            isDone: item.isDone || false,
+                            tags: item.tags || { engineer: [], sd: [] }
+                        };
+                    }
+                    return item;
+                })
             );
 
             // تحديث custom numbers
@@ -696,13 +616,13 @@ export default function DcPage() {
                 return map;
             });
         }
-    }
+    }, [customNumbers]);
 
     // Get projects list for filters
     const projects = [...new Set(irs.map(item => item.project).filter(Boolean))].sort();
 
     // Get departments list for filters
-    const departments = [...new Set(irs.map(item => item.department).filter(Boolean))].sort();
+    const departments = [...new Set(irs.map(item => getDepartmentAbbr(item.department)).filter(Boolean))].sort();
 
     // Stats
     const stats = {
@@ -711,18 +631,13 @@ export default function DcPage() {
         revisions: irs.filter(ir => ir.isRevision).length,
         cpr: irs.filter(ir => ir.isCPR).length,
         cprRevisions: irs.filter(ir => ir.isRevision && ir.revisionType === "CPR_REVISION").length,
-        completed: irs.filter(ir => ir.isDone).length
+        completed: irs.filter(ir => ir.isDone).length,
+        ir: irs.filter(ir => !ir.isRevision && !ir.isCPR).length
     };
 
     // Reset all filters
-    const resetAllFilters = () => {
-        setSidebarFilters({
-            project: "all",
-            department: "all",
-            type: "all",
-            status: "all"
-        });
-        setAdvancedFilters({
+    const resetAllFilters = useCallback(() => {
+        setFilters({
             project: "all",
             type: "all",
             status: "all",
@@ -730,13 +645,11 @@ export default function DcPage() {
             department: "all"
         });
         setSearchTerm("");
-    };
+    }, []);
 
-    // تحديث الواجهة
-    const updateIRsLocally = (irNo, updates) => {
-        setIRs(prev => prev.map(item => 
-            item.irNo === irNo ? { ...item, ...updates } : item
-        ));
+    // Navigate to archive
+    const navigateToArchive = () => {
+        navigate("/dc/archive");
     };
 
     // 🎨 Render Components
@@ -745,6 +658,7 @@ export default function DcPage() {
             <div className="text-center">
                 <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
                 <p className="text-gray-600">Loading IRs...</p>
+                <p className="text-gray-400 text-sm mt-2">Please wait a moment</p>
             </div>
         </div>
     );
@@ -753,6 +667,25 @@ export default function DcPage() {
         toast && (
             <div className="fixed top-5 right-5 bg-gray-900 text-white px-4 py-2 rounded-lg shadow-lg z-50 animate-in fade-in slide-in-from-top-5">
                 {toast}
+            </div>
+        )
+    );
+
+    const ErrorAlert = () => (
+        error && (
+            <div className="bg-red-50 border border-red-200 rounded-xl p-6 mb-6">
+                <div className="flex items-center gap-3">
+                    <div className="text-red-500 text-xl">⚠️</div>
+                    <div className="flex-1">
+                        <p className="font-medium text-red-700">{error}</p>
+                        <button
+                            onClick={loadAllData}
+                            className="mt-2 text-sm text-red-600 hover:text-red-800 font-medium"
+                        >
+                            Click here to retry
+                        </button>
+                    </div>
+                </div>
             </div>
         )
     );
@@ -793,15 +726,16 @@ export default function DcPage() {
                     </label>
                     <input
                         type="text"
-                        placeholder="Search by number, description, user, project, floor, concrete grade, downloaded by..."
-                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        placeholder="Search by number, description, user, project, floor, concrete grade, downloaded by, location..."
+                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
+                        autoComplete="off"
                     />
                 </div>
                 <button
                     onClick={() => setSearchTerm("")}
-                    className="px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium"
+                    className="px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition"
                 >
                     Clear Search
                 </button>
@@ -815,18 +749,12 @@ export default function DcPage() {
     const AdvancedFilters = () => (
         <div className="bg-white rounded-xl shadow p-6 mb-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-                <h3 className="text-lg font-bold text-gray-800">🎯 Advanced Filters</h3>
+                <h3 className="text-lg font-bold text-gray-800">🎯 Filters</h3>
                 <button
-                    onClick={() => setAdvancedFilters({
-                        project: "all",
-                        type: "all",
-                        status: "all",
-                        dateRange: "all",
-                        department: "all"
-                    })}
+                    onClick={resetAllFilters}
                     className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm"
                 >
-                    Reset Advanced Filters
+                    Reset All Filters
                 </button>
             </div>
 
@@ -834,9 +762,9 @@ export default function DcPage() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
                     <select
-                        value={advancedFilters.project}
-                        onChange={(e) => setAdvancedFilters(prev => ({ ...prev, project: e.target.value }))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.project}
+                        onChange={(e) => setFilters(prev => ({ ...prev, project: e.target.value }))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All Projects</option>
                         {projects.map(project => (
@@ -848,9 +776,9 @@ export default function DcPage() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                     <select
-                        value={advancedFilters.type}
-                        onChange={(e) => setAdvancedFilters(prev => ({ ...prev, type: e.target.value }))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.type}
+                        onChange={(e) => setFilters(prev => ({ ...prev, type: e.target.value }))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All Types</option>
                         <option value="ir">IR Only</option>
@@ -862,9 +790,9 @@ export default function DcPage() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
                     <select
-                        value={advancedFilters.dateRange}
-                        onChange={(e) => setAdvancedFilters(prev => ({ ...prev, dateRange: e.target.value }))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.dateRange}
+                        onChange={(e) => setFilters(prev => ({ ...prev, dateRange: e.target.value }))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All Dates</option>
                         <option value="today">Today</option>
@@ -876,9 +804,9 @@ export default function DcPage() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                     <select
-                        value={advancedFilters.status}
-                        onChange={(e) => setAdvancedFilters(prev => ({ ...prev, status: e.target.value }))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.status}
+                        onChange={(e) => setFilters(prev => ({ ...prev, status: e.target.value }))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All Status</option>
                         <option value="pending">Pending</option>
@@ -889,9 +817,9 @@ export default function DcPage() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
                     <select
-                        value={advancedFilters.department}
-                        onChange={(e) => setAdvancedFilters(prev => ({ ...prev, department: e.target.value }))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.department}
+                        onChange={(e) => setFilters(prev => ({ ...prev, department: e.target.value }))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All Departments</option>
                         {departments.map(dept => (
@@ -908,18 +836,20 @@ export default function DcPage() {
             <div className="text-gray-400 text-6xl mb-4">📭</div>
             <h3 className="text-xl font-semibold text-gray-700 mb-2">No Items Found</h3>
             <p className="text-gray-500 mb-4">
-                No items match your current filters. Try adjusting your search criteria.
+                {irs.length === 0 
+                    ? "No items in the system yet. Wait for engineers to submit requests."
+                    : "No items match your current filters. Try adjusting your search criteria."}
             </p>
             <button
                 onClick={resetAllFilters}
-                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+                className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium transition"
             >
                 Reset All Filters
             </button>
         </div>
     );
 
-    const RevisionChip = ({ rev }) => {
+    const RevisionChip = memo(({ rev }) => {
         const displayNumber = getRevDisplayNumber(rev);
         const revTypeClass = getRevTypeClass(rev);
         const revTypeText = getRevTypeText(rev);
@@ -944,7 +874,7 @@ export default function DcPage() {
                             📌 {rev.project || "Unknown"}
                         </span>
                         <span className="text-xs font-medium px-2 py-1 bg-purple-100 text-purple-800 rounded">
-                            🏢 {getDeptAbbr(rev.department)}
+                            🏢 {getDepartmentAbbr(rev.department)}
                         </span>
                         <span className="text-xs font-medium px-2 py-1 bg-gray-100 text-gray-800 rounded">
                             👤 {rev.user || "Unknown"}
@@ -957,7 +887,7 @@ export default function DcPage() {
                 </div>
 
                 <div className="text-xs text-gray-500 mb-4">
-                    ⏰ {time} • {formatShortDate(rev.sentAt)}
+                    ⏰ {time} • {formatDateShort(rev.sentAt)}
                 </div>
 
                 <div className="flex gap-2">
@@ -978,11 +908,11 @@ export default function DcPage() {
                 </div>
             </div>
         );
-    };
+    });
 
-    const IRTableRow = ({ ir, dept }) => {
+    const IRTableRow = memo(({ ir, dept }) => {
         const isDownloaded = downloadedIRs.has(ir.irNo) || ir.isDone;
-        const isCPR = ir.isCPR;
+        const isCPR = ir.isCPR || ir.requestType === "CPR";
 
         return (
             <tr className={`border-b transition-colors
@@ -1005,16 +935,33 @@ export default function DcPage() {
 
                                 <input
                                     className="w-full border border-gray-300 px-2 py-2 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none pr-24 mt-2"
-                                    value={customNumbers[ir.irNo] ?? formatIrNumber(ir.irNo)}
-                                    onChange={(e) => setCustomNumbers((prev) => ({ ...prev, [ir.irNo]: e.target.value }))}
+                                    value={customNumbers[ir.irNo] !== undefined ? customNumbers[ir.irNo] : formatIrNumber(ir.irNo)}
+                                    onChange={(e) => {
+                                        setCustomNumbers(prev => ({
+                                            ...prev,
+                                            [ir.irNo]: e.target.value
+                                        }));
+                                    }}
+                                    onKeyDown={(e) => {
+                                        if (e.key === 'Enter') {
+                                            handleConfirmSerial(ir);
+                                            e.preventDefault();
+                                        }
+                                    }}
                                     placeholder="Change IR number..."
+                                    autoComplete="off"
                                 />
                                 <button
                                     disabled={!!savingSerials[ir.irNo]}
-                                    onClick={() => handleConfirmSerial(ir)}
-                                    className={`absolute right-1 bottom-1 px-3 py-1.5 rounded text-sm font-medium ${savingSerials[ir.irNo] ?
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleConfirmSerial(ir);
+                                    }}
+                                    className={`absolute right-1 bottom-1 px-3 py-1.5 rounded text-sm font-medium ${
+                                        savingSerials[ir.irNo] ?
                                         "bg-gray-400 text-gray-700 cursor-not-allowed" :
-                                        "bg-emerald-600 hover:bg-emerald-700 text-white"}`}
+                                        "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                    }`}
                                 >
                                     {savingSerials[ir.irNo] ? "..." : "Update"}
                                 </button>
@@ -1034,9 +981,7 @@ export default function DcPage() {
                 </td>
 
                 <td className="p-3">
-                    <span className={`px-3 py-1 rounded-full text-xs font-medium
-                        ${isCPR ? "bg-green-100 text-green-800 border border-green-300" :
-                            "bg-blue-100 text-blue-800 border border-blue-300"}`}>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${getTypeClass(ir)}`}>
                         {isCPR ? "CPR" : "IR"}
                     </span>
                     <div className="text-xs text-gray-500 mt-1">
@@ -1089,7 +1034,7 @@ export default function DcPage() {
                     <div className="space-y-2">
                         {isDownloaded ? (
                             <div className="flex flex-col gap-1">
-                                <span className="px-3 py-1.5 bg-emerald-100 text-emerald-800 rounded-full text-xs font-medium flex items-center gap-1 w-fit">
+                                <span className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${getStatusClass(ir)}`}>
                                     <span>✓</span> Done
                                 </span>
 
@@ -1098,14 +1043,14 @@ export default function DcPage() {
                                         <span className="font-medium">📄 Downloaded by:</span> {ir.downloadedBy}
                                         {ir.downloadedAt && (
                                             <div className="text-gray-500 mt-1">
-                                                on {formatShortDate(ir.downloadedAt)}
+                                                on {formatDateShort(ir.downloadedAt)}
                                             </div>
                                         )}
                                     </div>
                                 )}
                             </div>
                         ) : (
-                            <span className="px-3 py-1.5 bg-yellow-100 text-yellow-800 rounded-full text-xs font-medium">
+                            <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${getStatusClass(ir)}`}>
                                 Pending
                             </span>
                         )}
@@ -1145,9 +1090,9 @@ export default function DcPage() {
                 </td>
             </tr>
         );
-    };
+    });
 
-    const ProjectSection = ({ project, depts }) => {
+    const ProjectSection = memo(({ project, depts }) => {
         const projectRevs = Object.values(depts).flat().filter((x) => x.isRevision);
         const projectIRs = Object.values(depts).flat().filter((x) => !x.isRevision);
 
@@ -1164,10 +1109,10 @@ export default function DcPage() {
                             </h2>
                             <div className="flex flex-wrap gap-3 mt-2">
                                 <span className="text-sky-200">
-                                    IR: {projectIRs.filter(x => !x.isCPR).length}
+                                    IR: {projectIRs.filter(x => !x.isCPR && x.requestType !== "CPR").length}
                                 </span>
                                 <span className="text-green-200">
-                                    CPR: {projectIRs.filter(x => x.isCPR).length}
+                                    CPR: {projectIRs.filter(x => x.isCPR || x.requestType === "CPR").length}
                                 </span>
                                 <span className="text-amber-200">
                                     REV: {projectRevs.length}
@@ -1200,7 +1145,7 @@ export default function DcPage() {
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {projectRevs.map((rev) => (
-                                    <RevisionChip key={rev.irNo || rev.revNo} rev={rev} />
+                                    <RevisionChip key={`${rev.irNo}-${rev.sentAt || ''}`} rev={rev} />
                                 ))}
                             </div>
                         </div>
@@ -1252,8 +1197,12 @@ export default function DcPage() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {list.map((ir) => (
-                                                <IRTableRow key={ir.irNo} ir={ir} dept={dept} />
+                                            {list.map((ir, index) => (
+                                                <IRTableRow 
+                                                    key={`${ir.irNo}-${ir.sentAt || ''}-${index}`}
+                                                    ir={ir} 
+                                                    dept={dept} 
+                                                />
                                             ))}
                                         </tbody>
                                     </table>
@@ -1264,8 +1213,9 @@ export default function DcPage() {
                 </div>
             </section>
         );
-    };
+    });
 
+    // Main render
     if (loading) {
         return <LoadingScreen />;
     }
@@ -1275,70 +1225,114 @@ export default function DcPage() {
             <ToastNotification />
 
             {/* Main Content */}
-            <div className="flex flex-col gap-6 w-full px-32">
-                <div className="">
-                    <StatsCards />
-                    <SearchBar />
-                    <AdvancedFilters />
+            <div className="flex flex-col gap-6 w-full px-4 md:px-8 lg:px-32 py-6">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-4">
+                    <div>
+                        <h1 className="text-3xl md:text-4xl font-bold text-gray-800">
+                            📊 DC Dashboard
+                        </h1>
+                        <p className="text-gray-600 mt-2">
+                            Total Items: <span className="font-bold text-blue-600">{irs.length}</span>
+                            <span className="mx-3">•</span>
+                            Showing: <span className="font-bold text-green-600">{filteredIRs.length}</span>
+                            <span className="mx-3">•</span>
+                            <button
+                                onClick={loadAllData}
+                                className="text-blue-500 hover:text-blue-700 font-medium"
+                            >
+                                🔄 Refresh
+                            </button>
+                        </p>
+                    </div>
 
-                    {/* Main Content */}
-                    {Object.keys(grouped).length === 0 ? (
-                        <EmptyState />
-                    ) : (
-                        <div className="space-y-8">
-                            {Object.keys(grouped).map((project) => (
-                                <ProjectSection
-                                    key={project}
-                                    project={project}
-                                    depts={grouped[project]}
-                                />
-                            ))}
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={navigateToArchive}
+                            className="px-4 py-2 bg-gray-800 hover:bg-black text-white rounded-lg font-medium transition flex items-center gap-2"
+                        >
+                            📁 View Archive
+                        </button>
+                        <div className="text-sm bg-white/80 px-4 py-2 rounded-full shadow">
+                            DC User Dashboard
                         </div>
-                    )}
+                    </div>
                 </div>
+
+                {error && <ErrorAlert />}
+
+                <StatsCards />
+                <SearchBar />
+                <AdvancedFilters />
+
+                {/* Main Content */}
+                {Object.keys(grouped).length === 0 ? (
+                    <EmptyState />
+                ) : (
+                    <div className="space-y-8">
+                        {Object.keys(grouped).map((project) => (
+                            <ProjectSection
+                                key={project}
+                                project={project}
+                                depts={grouped[project]}
+                            />
+                        ))}
+                    </div>
+                )}
+
+                {/* Information Section */}
+                {irs.length > 0 && (
+                    <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
+                        <div className="flex items-start gap-3">
+                            <div className="text-blue-500 text-2xl">💡</div>
+                            <div>
+                                <h4 className="font-bold text-blue-800 mb-2">Dashboard Information</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white/50 p-3 rounded-lg">
+                                        <p className="text-blue-700 text-sm font-medium">📋 IR/CPR Management</p>
+                                        <p className="text-blue-600 text-xs mt-1">
+                                            • Update IR numbers before download<br/>
+                                            • Download Word files for each IR<br/>
+                                            • Archive completed items<br/>
+                                            • Copy data to clipboard
+                                        </p>
+                                    </div>
+                                    <div className="bg-white/50 p-3 rounded-lg">
+                                        <p className="text-emerald-700 text-sm font-medium">🔄 Revision Handling</p>
+                                        <p className="text-emerald-600 text-xs mt-1">
+                                            • View all pending revisions<br/>
+                                            • Mark revisions as done<br/>
+                                            • Archive revisions when completed<br/>
+                                            • Separate revision counters
+                                        </p>
+                                    </div>
+                                    <div className="bg-white/50 p-3 rounded-lg">
+                                        <p className="text-purple-700 text-sm font-medium">⚡ Quick Actions</p>
+                                        <p className="text-purple-600 text-xs mt-1">
+                                            • Search by any field<br/>
+                                            • Filter by project, department, type<br/>
+                                            • Copy all IRs in a department<br/>
+                                            • View detailed statistics
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
             {/* Footer */}
             <div className="max-w-7xl mx-auto px-4 py-6 text-center text-gray-500 text-sm border-t">
                 <div className="flex flex-col md:flex-row justify-between items-center">
-                    <p>DC Dashboard • Showing: {filteredIRs.length} of {irs.length} items</p>
-                    <p>Last Updated: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    <p>DC Dashboard • Total: {irs.length} • Showing: {filteredIRs.length} • Last Updated: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                    <div className="flex gap-4 mt-2 md:mt-0">
+                        <span className="text-xs px-2 py-1 bg-blue-100 text-blue-800 rounded">IR: {stats.ir}</span>
+                        <span className="text-xs px-2 py-1 bg-green-100 text-green-800 rounded">CPR: {stats.cpr}</span>
+                        <span className="text-xs px-2 py-1 bg-purple-100 text-purple-800 rounded">REV: {stats.revisions}</span>
+                    </div>
                 </div>
             </div>
         </div>
     );
-}
-
-/**
- * تنسيق رقم IR/CPR بشكل مختصر
- */
-function formatIrNumber(full) {
-    if (!full) return "";
-    try {
-        if (full.includes("BADYA-CON")) {
-            const parts = full.split("-");
-            if (parts.length >= 6) {
-                const project = parts[2] || "";
-                const type = parts[3] || "";
-                const dept = parts[4] || "";
-                const number = parts[5] || "";
-
-                if (type === "CPR") {
-                    return `CPR-${project}-${dept}-${number}`;
-                }
-                return `${project}-${dept}-${number}`;
-            }
-        }
-
-        if (full.includes("REV-")) {
-            const revParts = full.split("-");
-            if (revParts.length >= 3) {
-                return `REV-${revParts[1]}-${revParts[2]}`;
-            }
-        }
-
-        return full;
-    } catch {
-        return full;
-    }
 }

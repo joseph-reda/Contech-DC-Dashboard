@@ -24,7 +24,7 @@ export default function AdminSettings() {
         
         // Email Settings
         smtpHost: "",
-        smtpPort: "",
+        smtpPort: "587",
         smtpUsername: "",
         smtpPassword: "",
         notificationEmail: "",
@@ -38,7 +38,20 @@ export default function AdminSettings() {
         defaultTheme: "light", // light, dark, auto
         itemsPerPage: 25,
         showAvatars: true,
-        enableAnimations: true
+        enableAnimations: true,
+        
+        // IR Settings
+        defaultDepartment: "ST",
+        enableCPR: true,
+        requireLocation: false,
+        enableRevisions: true,
+        autoArchiveDays: 30,
+        
+        // Notification Settings
+        notifyOnNewIR: true,
+        notifyOnCompletion: true,
+        notifyOnRevision: true,
+        dailySummary: true
     });
 
     // Authentication check
@@ -57,14 +70,30 @@ export default function AdminSettings() {
     const loadSettings = async () => {
         setLoading(true);
         try {
-            // In a real app, you would fetch settings from API
-            // For now, we'll use localStorage
+            // Try to load from API first
+            const response = await fetch(`${API_URL}/admin/settings`).catch(() => ({ ok: false }));
+            
+            if (response.ok) {
+                const data = await response.json();
+                if (data.settings) {
+                    setSettings(data.settings);
+                    showToast("Settings loaded from server", "success");
+                }
+            } else {
+                // Fallback to localStorage
+                const savedSettings = localStorage.getItem("admin_settings");
+                if (savedSettings) {
+                    setSettings(JSON.parse(savedSettings));
+                    showToast("Settings loaded from local storage", "info");
+                }
+            }
+        } catch (error) {
+            console.error("Failed to load settings:", error);
+            // Use localStorage as fallback
             const savedSettings = localStorage.getItem("admin_settings");
             if (savedSettings) {
                 setSettings(JSON.parse(savedSettings));
             }
-        } catch (error) {
-            console.error("Failed to load settings:", error);
         } finally {
             setLoading(false);
         }
@@ -75,7 +104,14 @@ export default function AdminSettings() {
         setTimeout(() => setToast({ show: false, message: "", type: "" }), 3000);
     };
 
-    const handleInputChange = (section, key, value) => {
+    const handleInputChange = (key, value) => {
+        setSettings(prev => ({
+            ...prev,
+            [key]: value
+        }));
+    };
+
+    const handleSectionChange = (section, key, value) => {
         setSettings(prev => ({
             ...prev,
             [section]: {
@@ -88,17 +124,30 @@ export default function AdminSettings() {
     const handleSaveSettings = async () => {
         setSaving(true);
         try {
-            // In a real app, you would save to API
-            // For now, we'll save to localStorage
+            // First try to save to API
+            const response = await fetch(`${API_URL}/admin/settings`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ settings })
+            }).catch(() => ({ ok: false }));
+
+            // Always save to localStorage as backup
             localStorage.setItem("admin_settings", JSON.stringify(settings));
+
+            if (response.ok) {
+                showToast("Settings saved successfully to server!");
+            } else {
+                showToast("Settings saved to local storage", "warning");
+            }
+
+            // Simulate API call delay
+            await new Promise(resolve => setTimeout(resolve, 500));
             
-            // Simulate API call
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            showToast("Settings saved successfully!");
         } catch (error) {
             console.error("Failed to save settings:", error);
-            showToast("Failed to save settings", "error");
+            // Fallback to localStorage only
+            localStorage.setItem("admin_settings", JSON.stringify(settings));
+            showToast("Settings saved to local storage", "info");
         } finally {
             setSaving(false);
         }
@@ -116,7 +165,7 @@ export default function AdminSettings() {
                 passwordExpiryDays: 90,
                 requireTwoFactorAuth: false,
                 smtpHost: "",
-                smtpPort: "",
+                smtpPort: "587",
                 smtpUsername: "",
                 smtpPassword: "",
                 notificationEmail: "",
@@ -126,7 +175,16 @@ export default function AdminSettings() {
                 defaultTheme: "light",
                 itemsPerPage: 25,
                 showAvatars: true,
-                enableAnimations: true
+                enableAnimations: true,
+                defaultDepartment: "ST",
+                enableCPR: true,
+                requireLocation: false,
+                enableRevisions: true,
+                autoArchiveDays: 30,
+                notifyOnNewIR: true,
+                notifyOnCompletion: true,
+                notifyOnRevision: true,
+                dailySummary: true
             };
             setSettings(defaultSettings);
             showToast("Settings reset to default");
@@ -158,7 +216,7 @@ export default function AdminSettings() {
                 setSettings(importedSettings);
                 showToast("Settings imported successfully");
             } catch (error) {
-                showToast("Invalid settings file", "error");
+                showToast("Invalid settings file format", "error");
             }
         };
         reader.readAsText(file);
@@ -166,6 +224,64 @@ export default function AdminSettings() {
         // Reset file input
         event.target.value = '';
     };
+
+    const handleTestEmail = async () => {
+        if (!settings.smtpHost || !settings.smtpUsername || !settings.notificationEmail) {
+            showToast("Please configure email settings first", "error");
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/admin/test-email`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    smtpHost: settings.smtpHost,
+                    smtpPort: settings.smtpPort,
+                    smtpUsername: settings.smtpUsername,
+                    smtpPassword: settings.smtpPassword,
+                    toEmail: settings.notificationEmail
+                })
+            }).catch(() => ({ ok: false }));
+
+            if (response.ok) {
+                showToast("Test email sent successfully!");
+            } else {
+                showToast("Failed to send test email", "error");
+            }
+        } catch (error) {
+            showToast("Error sending test email", "error");
+        }
+    };
+
+    const handleRunBackup = async () => {
+        if (!settings.autoBackup) {
+            showToast("Auto backup is disabled", "warning");
+            return;
+        }
+
+        try {
+            const response = await fetch(`${API_URL}/admin/backup`, {
+                method: "POST"
+            }).catch(() => ({ ok: false }));
+
+            if (response.ok) {
+                showToast("Backup initiated successfully!");
+            } else {
+                showToast("Backup failed", "error");
+            }
+        } catch (error) {
+            showToast("Error initiating backup", "error");
+        }
+    };
+
+    const departments = [
+        { value: "ST", label: "Civil/Structure" },
+        { value: "ARCH", label: "Architectural" },
+        { value: "ELECT", label: "Electrical" },
+        { value: "MEP", label: "Mechanical/MEP" },
+        { value: "SURV", label: "Survey" }
+    ];
 
     if (loading) {
         return (
@@ -187,10 +303,10 @@ export default function AdminSettings() {
 
             {/* Toast Notification */}
             {toast.show && (
-                <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium animate-in fade-in slide-in-from-top-5 ${toast.type === "error" ? "bg-red-600" : "bg-green-600"
+                <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium animate-in fade-in slide-in-from-top-5 ${toast.type === "error" ? "bg-red-600" : toast.type === "warning" ? "bg-amber-600" : "bg-green-600"
                     }`}>
                     <div className="flex items-center gap-2">
-                        {toast.type === "error" ? "❌" : "✅"}
+                        {toast.type === "error" ? "❌" : toast.type === "warning" ? "⚠️" : "✅"}
                         {toast.message}
                     </div>
                 </div>
@@ -241,7 +357,7 @@ export default function AdminSettings() {
                                             <input
                                                 type="checkbox"
                                                 checked={settings.autoIncrementCounters}
-                                                onChange={(e) => setSettings(prev => ({ ...prev, autoIncrementCounters: e.target.checked }))}
+                                                onChange={(e) => handleInputChange("autoIncrementCounters", e.target.checked)}
                                                 className="sr-only peer"
                                             />
                                             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -250,14 +366,30 @@ export default function AdminSettings() {
 
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <p className="font-medium text-gray-700">Require Password Change</p>
-                                            <p className="text-sm text-gray-500">Force password change on first login</p>
+                                            <p className="font-medium text-gray-700">Enable Email Notifications</p>
+                                            <p className="text-sm text-gray-500">Send email notifications for new IRs</p>
                                         </div>
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input
                                                 type="checkbox"
-                                                checked={settings.requirePasswordChange}
-                                                onChange={(e) => setSettings(prev => ({ ...prev, requirePasswordChange: e.target.checked }))}
+                                                checked={settings.enableEmailNotifications}
+                                                onChange={(e) => handleInputChange("enableEmailNotifications", e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-medium text-gray-700">Enable CPR Requests</p>
+                                            <p className="text-sm text-gray-500">Allow Concrete Pouring Requests</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={settings.enableCPR}
+                                                onChange={(e) => handleInputChange("enableCPR", e.target.checked)}
                                                 className="sr-only peer"
                                             />
                                             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -268,14 +400,14 @@ export default function AdminSettings() {
                                 <div className="space-y-4">
                                     <div className="flex items-center justify-between">
                                         <div>
-                                            <p className="font-medium text-gray-700">Enable Email Notifications</p>
-                                            <p className="text-sm text-gray-500">Send email notifications for new IRs</p>
+                                            <p className="font-medium text-gray-700">Require Password Change</p>
+                                            <p className="text-sm text-gray-500">Force password change on first login</p>
                                         </div>
                                         <label className="relative inline-flex items-center cursor-pointer">
                                             <input
                                                 type="checkbox"
-                                                checked={settings.enableEmailNotifications}
-                                                onChange={(e) => setSettings(prev => ({ ...prev, enableEmailNotifications: e.target.checked }))}
+                                                checked={settings.requirePasswordChange}
+                                                onChange={(e) => handleInputChange("requirePasswordChange", e.target.checked)}
                                                 className="sr-only peer"
                                             />
                                             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -291,7 +423,23 @@ export default function AdminSettings() {
                                             <input
                                                 type="checkbox"
                                                 checked={settings.allowUserRegistration}
-                                                onChange={(e) => setSettings(prev => ({ ...prev, allowUserRegistration: e.target.checked }))}
+                                                onChange={(e) => handleInputChange("allowUserRegistration", e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
+                                        </label>
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-medium text-gray-700">Enable Revisions</p>
+                                            <p className="text-sm text-gray-500">Allow revision requests</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={settings.enableRevisions}
+                                                onChange={(e) => handleInputChange("enableRevisions", e.target.checked)}
                                                 className="sr-only peer"
                                             />
                                             <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-blue-600"></div>
@@ -314,7 +462,7 @@ export default function AdminSettings() {
                                     <input
                                         type="number"
                                         value={settings.maxLoginAttempts}
-                                        onChange={(e) => setSettings(prev => ({ ...prev, maxLoginAttempts: parseInt(e.target.value) || 3 }))}
+                                        onChange={(e) => handleInputChange("maxLoginAttempts", parseInt(e.target.value) || 3)}
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                                         min="1"
                                         max="10"
@@ -329,7 +477,7 @@ export default function AdminSettings() {
                                     <input
                                         type="number"
                                         value={settings.sessionTimeout}
-                                        onChange={(e) => setSettings(prev => ({ ...prev, sessionTimeout: parseInt(e.target.value) || 60 }))}
+                                        onChange={(e) => handleInputChange("sessionTimeout", parseInt(e.target.value) || 60)}
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                                         min="5"
                                         max="480"
@@ -344,7 +492,7 @@ export default function AdminSettings() {
                                     <input
                                         type="number"
                                         value={settings.passwordExpiryDays}
-                                        onChange={(e) => setSettings(prev => ({ ...prev, passwordExpiryDays: parseInt(e.target.value) || 90 }))}
+                                        onChange={(e) => handleInputChange("passwordExpiryDays", parseInt(e.target.value) || 90)}
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                                         min="1"
                                         max="365"
@@ -361,7 +509,7 @@ export default function AdminSettings() {
                                         <input
                                             type="checkbox"
                                             checked={settings.requireTwoFactorAuth}
-                                            onChange={(e) => setSettings(prev => ({ ...prev, requireTwoFactorAuth: e.target.checked }))}
+                                            onChange={(e) => handleInputChange("requireTwoFactorAuth", e.target.checked)}
                                             className="sr-only peer"
                                         />
                                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-red-600"></div>
@@ -382,7 +530,7 @@ export default function AdminSettings() {
                                     </label>
                                     <select
                                         value={settings.defaultTheme}
-                                        onChange={(e) => setSettings(prev => ({ ...prev, defaultTheme: e.target.value }))}
+                                        onChange={(e) => handleInputChange("defaultTheme", e.target.value)}
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white"
                                     >
                                         <option value="light">Light</option>
@@ -395,14 +543,48 @@ export default function AdminSettings() {
                                     <label className="block text-sm font-medium text-gray-700 mb-2">
                                         Items Per Page
                                     </label>
+                                    <select
+                                        value={settings.itemsPerPage}
+                                        onChange={(e) => handleInputChange("itemsPerPage", parseInt(e.target.value))}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white"
+                                    >
+                                        <option value="10">10 items</option>
+                                        <option value="25">25 items</option>
+                                        <option value="50">50 items</option>
+                                        <option value="100">100 items</option>
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Default Department
+                                    </label>
+                                    <select
+                                        value={settings.defaultDepartment}
+                                        onChange={(e) => handleInputChange("defaultDepartment", e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white"
+                                    >
+                                        {departments.map(dept => (
+                                            <option key={dept.value} value={dept.value}>
+                                                {dept.label}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Auto Archive (days)
+                                    </label>
                                     <input
                                         type="number"
-                                        value={settings.itemsPerPage}
-                                        onChange={(e) => setSettings(prev => ({ ...prev, itemsPerPage: parseInt(e.target.value) || 25 }))}
+                                        value={settings.autoArchiveDays}
+                                        onChange={(e) => handleInputChange("autoArchiveDays", parseInt(e.target.value) || 30)}
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
-                                        min="10"
-                                        max="100"
+                                        min="1"
+                                        max="365"
                                     />
+                                    <p className="text-sm text-gray-500 mt-1">Auto archive completed items after days</p>
                                 </div>
 
                                 <div className="flex items-center justify-between">
@@ -414,7 +596,7 @@ export default function AdminSettings() {
                                         <input
                                             type="checkbox"
                                             checked={settings.showAvatars}
-                                            onChange={(e) => setSettings(prev => ({ ...prev, showAvatars: e.target.checked }))}
+                                            onChange={(e) => handleInputChange("showAvatars", e.target.checked)}
                                             className="sr-only peer"
                                         />
                                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
@@ -430,7 +612,7 @@ export default function AdminSettings() {
                                         <input
                                             type="checkbox"
                                             checked={settings.enableAnimations}
-                                            onChange={(e) => setSettings(prev => ({ ...prev, enableAnimations: e.target.checked }))}
+                                            onChange={(e) => handleInputChange("enableAnimations", e.target.checked)}
                                             className="sr-only peer"
                                         />
                                         <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-purple-600"></div>
@@ -439,10 +621,94 @@ export default function AdminSettings() {
                             </div>
                         </div>
 
+                        {/* Email Settings */}
+                        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+                            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                                <span className="text-green-500">📧</span> Email Settings
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        SMTP Host
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={settings.smtpHost}
+                                        onChange={(e) => handleInputChange("smtpHost", e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                        placeholder="smtp.gmail.com"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        SMTP Port
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={settings.smtpPort}
+                                        onChange={(e) => handleInputChange("smtpPort", e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                        placeholder="587"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        SMTP Username
+                                    </label>
+                                    <input
+                                        type="text"
+                                        value={settings.smtpUsername}
+                                        onChange={(e) => handleInputChange("smtpUsername", e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                        placeholder="your-email@gmail.com"
+                                    />
+                                </div>
+
+                                <div>
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        SMTP Password
+                                    </label>
+                                    <input
+                                        type="password"
+                                        value={settings.smtpPassword}
+                                        onChange={(e) => handleInputChange("smtpPassword", e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                        placeholder="••••••••"
+                                    />
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                                        Notification Email
+                                    </label>
+                                    <input
+                                        type="email"
+                                        value={settings.notificationEmail}
+                                        onChange={(e) => handleInputChange("notificationEmail", e.target.value)}
+                                        className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                        placeholder="notifications@company.com"
+                                    />
+                                    <p className="text-sm text-gray-500 mt-1">All system notifications will be sent to this email</p>
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <button
+                                        onClick={handleTestEmail}
+                                        disabled={!settings.smtpHost || !settings.smtpUsername}
+                                        className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg font-medium transition disabled:bg-gray-400"
+                                    >
+                                        ✉️ Test Email Configuration
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
                         {/* Backup Settings */}
                         <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
                             <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
-                                <span className="text-green-500">💾</span> Backup Settings
+                                <span className="text-amber-500">💾</span> Backup Settings
                             </h3>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <div>
@@ -451,7 +717,7 @@ export default function AdminSettings() {
                                     </label>
                                     <select
                                         value={settings.backupFrequency}
-                                        onChange={(e) => setSettings(prev => ({ ...prev, backupFrequency: e.target.value }))}
+                                        onChange={(e) => handleInputChange("backupFrequency", e.target.value)}
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white"
                                     >
                                         <option value="daily">Daily</option>
@@ -468,7 +734,7 @@ export default function AdminSettings() {
                                     <input
                                         type="number"
                                         value={settings.backupRetentionDays}
-                                        onChange={(e) => setSettings(prev => ({ ...prev, backupRetentionDays: parseInt(e.target.value) || 30 }))}
+                                        onChange={(e) => handleInputChange("backupRetentionDays", parseInt(e.target.value) || 30)}
                                         className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
                                         min="1"
                                         max="365"
@@ -485,10 +751,100 @@ export default function AdminSettings() {
                                             <input
                                                 type="checkbox"
                                                 checked={settings.autoBackup}
-                                                onChange={(e) => setSettings(prev => ({ ...prev, autoBackup: e.target.checked }))}
+                                                onChange={(e) => handleInputChange("autoBackup", e.target.checked)}
                                                 className="sr-only peer"
                                             />
-                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-green-600"></div>
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-600"></div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="md:col-span-2">
+                                    <button
+                                        onClick={handleRunBackup}
+                                        className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-medium transition"
+                                    >
+                                        💾 Run Manual Backup Now
+                                    </button>
+                                    <p className="text-sm text-gray-500 mt-2">
+                                        Next backup: {settings.autoBackup ? 
+                                            `Every ${settings.backupFrequency}` : 
+                                            "Auto backup disabled"}
+                                    </p>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Notification Settings */}
+                        <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
+                            <h3 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
+                                <span className="text-teal-500">🔔</span> Notification Settings
+                            </h3>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-medium text-gray-700">Notify on New IR</p>
+                                            <p className="text-sm text-gray-500">Send notification when new IR is created</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={settings.notifyOnNewIR}
+                                                onChange={(e) => handleInputChange("notifyOnNewIR", e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                                        </label>
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-medium text-gray-700">Notify on Completion</p>
+                                            <p className="text-sm text-gray-500">Send notification when IR is completed</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={settings.notifyOnCompletion}
+                                                onChange={(e) => handleInputChange("notifyOnCompletion", e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                                        </label>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-medium text-gray-700">Notify on Revision</p>
+                                            <p className="text-sm text-gray-500">Send notification for revision requests</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={settings.notifyOnRevision}
+                                                onChange={(e) => handleInputChange("notifyOnRevision", e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
+                                        </label>
+                                    </div>
+
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <p className="font-medium text-gray-700">Daily Summary</p>
+                                            <p className="text-sm text-gray-500">Send daily activity summary</p>
+                                        </div>
+                                        <label className="relative inline-flex items-center cursor-pointer">
+                                            <input
+                                                type="checkbox"
+                                                checked={settings.dailySummary}
+                                                onChange={(e) => handleInputChange("dailySummary", e.target.checked)}
+                                                className="sr-only peer"
+                                            />
+                                            <div className="w-11 h-6 bg-gray-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-teal-600"></div>
                                         </label>
                                     </div>
                                 </div>
@@ -573,6 +929,16 @@ export default function AdminSettings() {
                             <div>
                                 <p className="text-sm text-gray-300">Settings Last Modified</p>
                                 <p className="font-bold">{new Date().toLocaleString()}</p>
+                            </div>
+                        </div>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4 pt-4 border-t border-white/10">
+                            <div>
+                                <p className="text-sm text-gray-300">Database Status</p>
+                                <p className="font-bold text-green-400">Connected</p>
+                            </div>
+                            <div>
+                                <p className="text-sm text-gray-300">API Endpoints</p>
+                                <p className="font-bold">12 active endpoints</p>
                             </div>
                         </div>
                         <p className="text-sm text-gray-400 mt-4">

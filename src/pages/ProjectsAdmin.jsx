@@ -1,6 +1,8 @@
+// src/pages/ProjectsAdmin.jsx
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
+import Navbar from "../components/Navbar";
 
 export default function ProjectsAdmin() {
     const navigate = useNavigate();
@@ -9,13 +11,17 @@ export default function ProjectsAdmin() {
     const [error, setError] = useState("");
     const [toast, setToast] = useState({ show: false, message: "", type: "" });
     const [actionLoading, setActionLoading] = useState(false);
-    const [departments] = useState([
-        { id: "ARCH", name: "Architectural", color: "bg-blue-100 text-blue-800" },
-        { id: "ST", name: "Civil/Structure", color: "bg-green-100 text-green-800" },
-        { id: "ELECT", name: "Electrical", color: "bg-purple-100 text-purple-800" },
-        { id: "MEP", name: "Mechanical/MEP", color: "bg-amber-100 text-amber-800" },
-        { id: "SURV", name: "Survey", color: "bg-indigo-100 text-indigo-800" }
-    ]);
+    const [searchTerm, setSearchTerm] = useState("");
+    const [sortBy, setSortBy] = useState("name");
+    const [sortOrder, setSortOrder] = useState("asc");
+    
+    const departments = [
+        { id: "ARCH", name: "Architectural", color: "bg-blue-100 text-blue-800", icon: "🏛️" },
+        { id: "ST", name: "Civil/Structure", color: "bg-green-100 text-green-800", icon: "🏗️" },
+        { id: "ELECT", name: "Electrical", color: "bg-purple-100 text-purple-800", icon: "⚡" },
+        { id: "MEP", name: "Mechanical/MEP", color: "bg-amber-100 text-amber-800", icon: "🔧" },
+        { id: "SURV", name: "Survey", color: "bg-indigo-100 text-indigo-800", icon: "📐" }
+    ];
 
     // Form states for new project
     const [newProject, setNewProject] = useState({
@@ -27,7 +33,8 @@ export default function ProjectsAdmin() {
             ST: 0,
             MEP: 0,
             SURV: 0,
-            ELECT: 0
+            ELECT: 0,
+            CPR: 0
         },
         generalDesc: {
             ARCH: [],
@@ -51,7 +58,8 @@ export default function ProjectsAdmin() {
                 ST: 0,
                 MEP: 0,
                 SURV: 0,
-                ELECT: 0
+                ELECT: 0,
+                CPR: 0
             },
             generalDesc: {
                 ARCH: [],
@@ -62,7 +70,7 @@ export default function ProjectsAdmin() {
             }
         },
         editingDesc: {
-            dept: "",
+            dept: "ARCH",
             text: ""
         }
     });
@@ -84,14 +92,19 @@ export default function ProjectsAdmin() {
         setLoading(true);
         try {
             const res = await fetch(`${API_URL}/projects`);
-            if (!res.ok) throw new Error("Failed to load projects");
+            if (!res.ok) {
+                throw new Error(`Failed to load projects (Status: ${res.status})`);
+            }
             
             const data = await res.json();
+            console.log("Projects loaded:", data);
             setProjects(data.projects || {});
             setError("");
         } catch (err) {
             console.error("Failed to load projects:", err);
             setError("Failed to load projects. Please try again.");
+            // Initialize with empty object if API fails
+            setProjects({});
         } finally {
             setLoading(false);
         }
@@ -114,7 +127,8 @@ export default function ProjectsAdmin() {
                 ST: 0,
                 MEP: 0,
                 SURV: 0,
-                ELECT: 0
+                ELECT: 0,
+                CPR: 0
             },
             generalDesc: {
                 ARCH: [],
@@ -150,10 +164,25 @@ export default function ProjectsAdmin() {
         }));
     };
 
+    // Validate project name
+    const validateProjectName = (name) => {
+        if (!name.trim()) {
+            return "Project name is required";
+        }
+        if (name.length < 3) {
+            return "Project name must be at least 3 characters";
+        }
+        if (projects[name]) {
+            return "Project name already exists";
+        }
+        return "";
+    };
+
     // Add new project
     const handleAddProject = async () => {
-        if (!newProject.name.trim()) {
-            showToast("Project name is required", "error");
+        const nameError = validateProjectName(newProject.name);
+        if (nameError) {
+            showToast(nameError, "error");
             return;
         }
 
@@ -165,10 +194,14 @@ export default function ProjectsAdmin() {
             const projectData = {
                 name: newProject.name.trim(),
                 description: newProject.description.trim(),
-                locations: filteredLocations,
+                locations: filteredLocations.length > 0 ? filteredLocations : [newProject.name],
                 counters: newProject.counters,
-                generalDesc: newProject.generalDesc
+                generalDesc: newProject.generalDesc,
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString()
             };
+
+            console.log("Adding project:", projectData);
 
             const res = await fetch(`${API_URL}/projects`, {
                 method: "POST",
@@ -178,7 +211,9 @@ export default function ProjectsAdmin() {
 
             const data = await res.json();
             
-            if (!res.ok) throw new Error(data.error || "Failed to add project");
+            if (!res.ok) {
+                throw new Error(data.error || "Failed to add project");
+            }
 
             showToast("Project added successfully");
             resetNewProjectForm();
@@ -199,13 +234,14 @@ export default function ProjectsAdmin() {
             data: {
                 name: projectName,
                 description: projectData.description || "",
-                locations: projectData.locations?.length > 0 ? [...projectData.locations] : [""],
+                locations: projectData.locations?.length > 0 ? [...projectData.locations] : [projectName],
                 counters: projectData.counters || {
                     ARCH: 0,
                     ST: 0,
                     MEP: 0,
                     SURV: 0,
-                    ELECT: 0
+                    ELECT: 0,
+                    CPR: 0
                 },
                 generalDesc: projectData.generalDesc || {
                     ARCH: [],
@@ -236,7 +272,8 @@ export default function ProjectsAdmin() {
                     ST: 0,
                     MEP: 0,
                     SURV: 0,
-                    ELECT: 0
+                    ELECT: 0,
+                    CPR: 0
                 },
                 generalDesc: {
                     ARCH: [],
@@ -262,17 +299,20 @@ export default function ProjectsAdmin() {
 
         setActionLoading(true);
         try {
-            // First update in Firebase
+            const projectData = projects[projectName] || {};
+            const updatedCounters = {
+                ...projectData.counters,
+                [dept]: parseInt(value)
+            };
+
             const res = await fetch(`${API_URL}/projects`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     name: projectName,
-                    ...projects[projectName],
-                    counters: {
-                        ...projects[projectName]?.counters,
-                        [dept]: parseInt(value)
-                    }
+                    ...projectData,
+                    counters: updatedCounters,
+                    updatedAt: new Date().toISOString()
                 })
             });
 
@@ -285,10 +325,7 @@ export default function ProjectsAdmin() {
                 ...prev,
                 [projectName]: {
                     ...prev[projectName],
-                    counters: {
-                        ...prev[projectName].counters,
-                        [dept]: parseInt(value)
-                    }
+                    counters: updatedCounters
                 }
             }));
 
@@ -322,7 +359,8 @@ export default function ProjectsAdmin() {
                 body: JSON.stringify({
                     name: projectName,
                     ...projectData,
-                    counters: resetCounters
+                    counters: resetCounters,
+                    updatedAt: new Date().toISOString()
                 })
             });
 
@@ -365,9 +403,10 @@ export default function ProjectsAdmin() {
                 body: JSON.stringify({
                     name: editModal.data.name,
                     description: editModal.data.description,
-                    locations: filteredLocations,
+                    locations: filteredLocations.length > 0 ? filteredLocations : [editModal.data.name],
                     counters: editModal.data.counters,
-                    generalDesc: editModal.data.generalDesc
+                    generalDesc: editModal.data.generalDesc,
+                    updatedAt: new Date().toISOString()
                 })
             });
 
@@ -395,18 +434,21 @@ export default function ProjectsAdmin() {
         setActionLoading(true);
         try {
             // Note: You need to implement delete endpoint in backend
-            // For now, we'll remove it from local state and show message
+            // For now, we'll send a POST request to update with delete flag
             const updatedProjects = { ...projects };
             delete updatedProjects[projectName];
             setProjects(updatedProjects);
 
             showToast(`Project "${projectName}" deleted successfully`);
             
-            // TODO: Uncomment when backend delete endpoint is implemented
-            // const res = await fetch(`${API_URL}/projects/${projectName}`, { 
-            //     method: "DELETE" 
-            // });
-            // if (!res.ok) throw new Error("Delete failed");
+            // Try to call delete endpoint if it exists
+            try {
+                await fetch(`${API_URL}/projects/${projectName}`, { 
+                    method: "DELETE" 
+                });
+            } catch (deleteErr) {
+                console.log("Delete endpoint not implemented, using local state only");
+            }
             
         } catch (err) {
             console.error("Delete project error:", err);
@@ -468,7 +510,10 @@ export default function ProjectsAdmin() {
     // Add description to department
     const addDescription = () => {
         const { dept, text } = editModal.editingDesc;
-        if (!text.trim()) return;
+        if (!text.trim()) {
+            showToast("Description text is required", "error");
+            return;
+        }
         
         setEditModal(prev => ({
             ...prev,
@@ -484,6 +529,8 @@ export default function ProjectsAdmin() {
                 text: ""
             }
         }));
+        
+        showToast("Description added successfully");
     };
 
     // Remove description from department
@@ -498,6 +545,8 @@ export default function ProjectsAdmin() {
                 }
             }
         }));
+        
+        showToast("Description removed", "info");
     };
 
     // Update description input
@@ -528,6 +577,12 @@ export default function ProjectsAdmin() {
         return deptObj ? deptObj.name : dept;
     };
 
+    // Get department icon
+    const getDeptIcon = (dept) => {
+        const deptObj = departments.find(d => d.id === dept);
+        return deptObj ? deptObj.icon : "🏗️";
+    };
+
     // Get department color
     const getDeptColor = (dept) => {
         const deptObj = departments.find(d => d.id === dept);
@@ -539,9 +594,49 @@ export default function ProjectsAdmin() {
         return Object.values(counters || {}).reduce((sum, val) => sum + (parseInt(val) || 0), 0);
     };
 
+    // Format project name for display
+    const formatProjectName = (name) => {
+        return name.replace(/_/g, " ").replace(/-/g, " ");
+    };
+
+    // Filter and sort projects
+    const filteredAndSortedProjects = Object.entries(projects)
+        .filter(([name, data]) => {
+            if (!searchTerm) return true;
+            const searchLower = searchTerm.toLowerCase();
+            return (
+                name.toLowerCase().includes(searchLower) ||
+                (data.description && data.description.toLowerCase().includes(searchLower))
+            );
+        })
+        .sort(([nameA, dataA], [nameB, dataB]) => {
+            let compareValue = 0;
+            
+            switch(sortBy) {
+                case "name":
+                    compareValue = nameA.localeCompare(nameB);
+                    break;
+                case "counters":
+                    const totalA = getTotalCounters(dataA.counters);
+                    const totalB = getTotalCounters(dataB.counters);
+                    compareValue = totalA - totalB;
+                    break;
+                case "locations":
+                    const locsA = dataA.locations?.length || 0;
+                    const locsB = dataB.locations?.length || 0;
+                    compareValue = locsA - locsB;
+                    break;
+                default:
+                    compareValue = nameA.localeCompare(nameB);
+            }
+            
+            return sortOrder === "asc" ? compareValue : -compareValue;
+        });
+
     if (loading) {
         return (
             <>
+                <Navbar />
                 <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
                     <div className="text-center">
                         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
@@ -555,14 +650,15 @@ export default function ProjectsAdmin() {
 
     return (
         <>
+            <Navbar />
 
             {/* Toast Notification */}
             {toast.show && (
                 <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium animate-in fade-in slide-in-from-top-5 ${
-                    toast.type === "error" ? "bg-red-600" : "bg-green-600"
+                    toast.type === "error" ? "bg-red-600" : toast.type === "warning" ? "bg-amber-600" : "bg-green-600"
                 }`}>
                     <div className="flex items-center gap-2">
-                        {toast.type === "error" ? "❌" : "✅"}
+                        {toast.type === "error" ? "❌" : toast.type === "warning" ? "⚠️" : "✅"}
                         {toast.message}
                     </div>
                 </div>
@@ -606,6 +702,50 @@ export default function ProjectsAdmin() {
                                 </div>
                             </div>
                         )}
+
+                        {/* Search and Sort Bar */}
+                        <div className="bg-white rounded-xl p-4 shadow border mb-6">
+                            <div className="flex flex-col md:flex-row gap-4 items-center">
+                                <div className="flex-1 w-full">
+                                    <div className="relative">
+                                        <input
+                                            type="text"
+                                            placeholder="Search projects..."
+                                            value={searchTerm}
+                                            onChange={(e) => setSearchTerm(e.target.value)}
+                                            className="w-full px-4 py-3 pl-10 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                                        />
+                                        <div className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400">
+                                            🔍
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <select
+                                        value={sortBy}
+                                        onChange={(e) => setSortBy(e.target.value)}
+                                        className="px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                    >
+                                        <option value="name">Sort by Name</option>
+                                        <option value="counters">Sort by Counters</option>
+                                        <option value="locations">Sort by Locations</option>
+                                    </select>
+                                    <button
+                                        onClick={() => setSortOrder(sortOrder === "asc" ? "desc" : "asc")}
+                                        className="px-3 py-2 bg-gray-100 hover:bg-gray-200 rounded-lg"
+                                    >
+                                        {sortOrder === "asc" ? "↑" : "↓"}
+                                    </button>
+                                </div>
+                            </div>
+                            {searchTerm && (
+                                <div className="mt-2 text-sm text-gray-600">
+                                    Found {filteredAndSortedProjects.length} project{filteredAndSortedProjects.length !== 1 ? 's' : ''}
+                                    {filteredAndSortedProjects.length !== Object.keys(projects).length && 
+                                        ` of ${Object.keys(projects).length}`}
+                                </div>
+                            )}
+                        </div>
                     </div>
 
                     <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -632,6 +772,9 @@ export default function ProjectsAdmin() {
                                             className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500 outline-none transition"
                                             placeholder="Enter project name (e.g., D1-A2-02-01-F_F)"
                                         />
+                                        <p className="text-xs text-gray-500 mt-1">
+                                            Use a unique name with project code
+                                        </p>
                                     </div>
 
                                     {/* Description */}
@@ -732,6 +875,13 @@ export default function ProjectsAdmin() {
                                                 getTotalCounters(projects[name]?.counters) > 0).length}
                                         </span>
                                     </div>
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-sm text-gray-600">Locations Configured</span>
+                                        <span className="font-bold text-purple-600">
+                                            {Object.values(projects).reduce((sum, project) => 
+                                                sum + (project.locations?.length || 0), 0)}
+                                        </span>
+                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -762,9 +912,21 @@ export default function ProjectsAdmin() {
                                         Start Adding Project
                                     </button>
                                 </div>
+                            ) : filteredAndSortedProjects.length === 0 ? (
+                                <div className="bg-white rounded-2xl shadow border border-gray-200 p-12 text-center">
+                                    <div className="text-gray-400 text-6xl mb-4">🔍</div>
+                                    <h3 className="text-xl font-semibold text-gray-700 mb-2">No Matching Projects</h3>
+                                    <p className="text-gray-500 mb-6">No projects found for search term "{searchTerm}"</p>
+                                    <button
+                                        onClick={() => setSearchTerm("")}
+                                        className="px-6 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-medium"
+                                    >
+                                        Clear Search
+                                    </button>
+                                </div>
                             ) : (
                                 <div className="space-y-6">
-                                    {Object.entries(projects).map(([projectName, projectData]) => (
+                                    {filteredAndSortedProjects.map(([projectName, projectData]) => (
                                         <div
                                             key={projectName}
                                             className="bg-white rounded-2xl shadow-lg border border-gray-200 overflow-hidden hover:shadow-xl transition-shadow"
@@ -778,7 +940,7 @@ export default function ProjectsAdmin() {
                                                                 📁
                                                             </div>
                                                             <div>
-                                                                <h3 className="text-xl font-bold">{projectName}</h3>
+                                                                <h3 className="text-xl font-bold">{formatProjectName(projectName)}</h3>
                                                                 {projectData.description && (
                                                                     <p className="text-slate-300 text-sm mt-1">{projectData.description}</p>
                                                                 )}
@@ -786,11 +948,16 @@ export default function ProjectsAdmin() {
                                                         </div>
                                                         <div className="flex flex-wrap gap-2 mt-3">
                                                             <span className="px-3 py-1 bg-slate-600/50 text-white rounded-full text-xs">
-                                                                {projectData.locations?.length || 0} locations
+                                                                {projectData.locations?.length || 1} location{projectData.locations?.length !== 1 ? 's' : ''}
                                                             </span>
                                                             <span className="px-3 py-1 bg-blue-600/50 text-white rounded-full text-xs">
                                                                 {getTotalCounters(projectData.counters)} total IRs
                                                             </span>
+                                                            {projectData.createdAt && (
+                                                                <span className="px-3 py-1 bg-emerald-600/50 text-white rounded-full text-xs">
+                                                                    Created: {new Date(projectData.createdAt).toLocaleDateString()}
+                                                                </span>
+                                                            )}
                                                         </div>
                                                     </div>
                                                     <div className="flex gap-2 flex-wrap">
@@ -804,12 +971,14 @@ export default function ProjectsAdmin() {
                                                             onClick={() => resetCounters(projectName)}
                                                             className="px-4 py-2 bg-amber-500 hover:bg-amber-600 text-white rounded-lg font-medium transition flex items-center gap-2"
                                                             title="Reset all counters to 0"
+                                                            disabled={actionLoading}
                                                         >
                                                             <span>🔄</span> Reset Counters
                                                         </button>
                                                         <button
                                                             onClick={() => handleDeleteProject(projectName)}
                                                             className="px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium transition flex items-center gap-2"
+                                                            disabled={actionLoading}
                                                         >
                                                             <span>🗑️</span> Delete
                                                         </button>
@@ -834,61 +1003,96 @@ export default function ProjectsAdmin() {
                                                         </thead>
                                                         <tbody>
                                                             {Object.entries(projectData.counters || {}).map(([dept, counter]) => {
-                                                                const nextCounter = parseInt(counter) + 1;
-                                                                const nextIR = `BADYA-CON-${projectName.replace(/\s+/g, '-').toUpperCase()}-IR-${dept}-${nextCounter.toString().padStart(3, '0')}`;
-                                                                
-                                                                return (
-                                                                    <tr key={dept} className="border-b hover:bg-gray-50">
-                                                                        <td className="p-3">
-                                                                            <div className="flex items-center gap-2">
-                                                                                <span className={`w-3 h-3 rounded-full ${
-                                                                                    dept === "ARCH" ? "bg-blue-500" :
-                                                                                    dept === "ST" ? "bg-green-500" :
-                                                                                    dept === "ELECT" ? "bg-purple-500" :
-                                                                                    dept === "MEP" ? "bg-amber-500" :
-                                                                                    dept === "SURV" ? "bg-indigo-500" :
-                                                                                    "bg-gray-500"
-                                                                                }`}></span>
-                                                                                <span className="font-medium">{getDeptName(dept)}</span>
-                                                                            </div>
-                                                                        </td>
-                                                                        <td className="p-3">
-                                                                            <div className="text-2xl font-bold text-gray-800">{counter}</div>
-                                                                        </td>
-                                                                        <td className="p-3">
-                                                                            <div className="text-sm font-mono bg-gray-100 p-2 rounded">
-                                                                                {nextIR}
-                                                                            </div>
-                                                                        </td>
-                                                                        <td className="p-3">
-                                                                            <div className="flex items-center gap-2">
-                                                                                <input
-                                                                                    type="number"
-                                                                                    value={counter}
-                                                                                    onChange={(e) => updateCounter(projectName, dept, e.target.value)}
-                                                                                    className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-                                                                                    min="0"
-                                                                                    disabled={actionLoading}
-                                                                                />
-                                                                                <button
-                                                                                    onClick={() => updateCounter(projectName, dept, parseInt(counter) + 1)}
-                                                                                    disabled={actionLoading}
-                                                                                    className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:bg-blue-400"
-                                                                                >
-                                                                                    +1
-                                                                                </button>
-                                                                                <button
-                                                                                    onClick={() => updateCounter(projectName, dept, 0)}
-                                                                                    disabled={actionLoading}
-                                                                                    className="px-3 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium"
-                                                                                    title="Reset to 0"
-                                                                                >
-                                                                                    0
-                                                                                </button>
-                                                                            </div>
-                                                                        </td>
-                                                                    </tr>
-                                                                );
+                                                                if (dept === "CPR") {
+                                                                    const nextCounter = parseInt(counter) + 1;
+                                                                    const nextIR = `BADYA-CON-${projectName.replace(/\s+/g, '-').toUpperCase()}-CPR-${nextCounter.toString().padStart(3, '0')}`;
+                                                                    
+                                                                    return (
+                                                                        <tr key={dept} className="border-b hover:bg-gray-50">
+                                                                            <td className="p-3">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className="w-3 h-3 rounded-full bg-teal-500"></span>
+                                                                                    <span className="font-medium">Concrete Pouring (CPR)</span>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="p-3">
+                                                                                <div className="text-2xl font-bold text-gray-800">{counter}</div>
+                                                                            </td>
+                                                                            <td className="p-3">
+                                                                                <div className="text-sm font-mono bg-gray-100 p-2 rounded">
+                                                                                    {nextIR}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="p-3">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        value={counter}
+                                                                                        onChange={(e) => updateCounter(projectName, dept, e.target.value)}
+                                                                                        className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                                                                        min="0"
+                                                                                        disabled={actionLoading}
+                                                                                    />
+                                                                                    <button
+                                                                                        onClick={() => updateCounter(projectName, dept, parseInt(counter) + 1)}
+                                                                                        disabled={actionLoading}
+                                                                                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:bg-blue-400"
+                                                                                    >
+                                                                                        +1
+                                                                                    </button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                } else {
+                                                                    const nextCounter = parseInt(counter) + 1;
+                                                                    const nextIR = `BADYA-CON-${projectName.replace(/\s+/g, '-').toUpperCase()}-IR-${dept}-${nextCounter.toString().padStart(3, '0')}`;
+                                                                    
+                                                                    return (
+                                                                        <tr key={dept} className="border-b hover:bg-gray-50">
+                                                                            <td className="p-3">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <span className={`w-3 h-3 rounded-full ${
+                                                                                        dept === "ARCH" ? "bg-blue-500" :
+                                                                                        dept === "ST" ? "bg-green-500" :
+                                                                                        dept === "ELECT" ? "bg-purple-500" :
+                                                                                        dept === "MEP" ? "bg-amber-500" :
+                                                                                        dept === "SURV" ? "bg-indigo-500" :
+                                                                                        "bg-gray-500"
+                                                                                    }`}></span>
+                                                                                    <span className="font-medium">{getDeptName(dept)}</span>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="p-3">
+                                                                                <div className="text-2xl font-bold text-gray-800">{counter}</div>
+                                                                            </td>
+                                                                            <td className="p-3">
+                                                                                <div className="text-sm font-mono bg-gray-100 p-2 rounded">
+                                                                                    {nextIR}
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="p-3">
+                                                                                <div className="flex items-center gap-2">
+                                                                                    <input
+                                                                                        type="number"
+                                                                                        value={counter}
+                                                                                        onChange={(e) => updateCounter(projectName, dept, e.target.value)}
+                                                                                        className="w-24 px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                                                                        min="0"
+                                                                                        disabled={actionLoading}
+                                                                                    />
+                                                                                    <button
+                                                                                        onClick={() => updateCounter(projectName, dept, parseInt(counter) + 1)}
+                                                                                        disabled={actionLoading}
+                                                                                        className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-sm font-medium disabled:bg-blue-400"
+                                                                                    >
+                                                                                        +1
+                                                                                    </button>
+                                                                                </div>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                }
                                                             })}
                                                         </tbody>
                                                     </table>
@@ -910,42 +1114,6 @@ export default function ProjectsAdmin() {
                                                                     {location}
                                                                 </span>
                                                             ))}
-                                                        </div>
-                                                    </div>
-                                                )}
-
-                                                {/* General Descriptions */}
-                                                {projectData.generalDesc && Object.keys(projectData.generalDesc).some(dept => 
-                                                    projectData.generalDesc[dept]?.length > 0) && (
-                                                    <div className="mt-6">
-                                                        <h4 className="font-bold text-gray-700 mb-3 flex items-center gap-2">
-                                                            <span>📝</span> General Descriptions
-                                                        </h4>
-                                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                                                            {Object.entries(projectData.generalDesc).map(([dept, descriptions]) => {
-                                                                if (!descriptions || descriptions.length === 0) return null;
-                                                                
-                                                                return (
-                                                                    <div key={dept} className="border rounded-lg p-3">
-                                                                        <div className="flex items-center justify-between mb-2">
-                                                                            <span className={`px-2 py-1 text-xs font-medium rounded ${getDeptColor(dept)}`}>
-                                                                                {getDeptName(dept)}
-                                                                            </span>
-                                                                            <span className="text-xs text-gray-500">
-                                                                                {descriptions.length} descriptions
-                                                                            </span>
-                                                                        </div>
-                                                                        <ul className="space-y-1 max-h-40 overflow-y-auto">
-                                                                            {descriptions.map((desc, idx) => (
-                                                                                <li key={idx} className="text-sm text-gray-600 flex items-start gap-2">
-                                                                                    <span className="text-gray-400 mt-1">•</span>
-                                                                                    <span>{desc}</span>
-                                                                                </li>
-                                                                            ))}
-                                                                        </ul>
-                                                                    </div>
-                                                                );
-                                                            })}
                                                         </div>
                                                     </div>
                                                 )}
@@ -1052,8 +1220,8 @@ export default function ProjectsAdmin() {
                                 <h3 className="text-lg font-semibold text-gray-800 mb-4 flex items-center gap-2">
                                     <span>🔢</span> IR Counters Management
                                 </h3>
-                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
-                                    {departments.map(dept => (
+                                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4">
+                                    {[...departments, { id: "CPR", name: "Concrete Pouring", color: "bg-teal-100 text-teal-800", icon: "🏗️" }].map(dept => (
                                         <div key={dept.id} className="border rounded-lg p-4">
                                             <div className="flex items-center justify-between mb-3">
                                                 <span className={`px-3 py-1 rounded-full text-xs font-medium ${dept.color}`}>
@@ -1079,7 +1247,7 @@ export default function ProjectsAdmin() {
                                                 </button>
                                             </div>
                                             <div className="text-xs text-gray-500 mt-2">
-                                                Next IR: BADYA-CON-{editModal.data.name.replace(/\s+/g, '-').toUpperCase()}-IR-{dept.id}-{(editModal.data.counters[dept.id] || 0) + 1}
+                                                Next: BADYA-CON-{editModal.data.name.replace(/\s+/g, '-').toUpperCase()}-{dept.id === "CPR" ? "CPR" : `IR-${dept.id}`}-{(editModal.data.counters[dept.id] || 0) + 1}
                                             </div>
                                         </div>
                                     ))}
@@ -1184,6 +1352,7 @@ export default function ProjectsAdmin() {
                             <button
                                 onClick={closeEditModal}
                                 className="px-6 py-2 bg-gray-300 hover:bg-gray-400 text-gray-800 rounded-lg font-medium"
+                                disabled={actionLoading}
                             >
                                 Cancel
                             </button>

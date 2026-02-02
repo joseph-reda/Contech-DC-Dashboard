@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
+import Navbar from "../components/Navbar";
 
 export default function UsersAdminPage() {
     const navigate = useNavigate();
@@ -36,6 +37,7 @@ export default function UsersAdminPage() {
     const [deptFilter, setDeptFilter] = useState("all");
     const [sortBy, setSortBy] = useState("username");
     const [sortOrder, setSortOrder] = useState("asc");
+    const [currentAdmin, setCurrentAdmin] = useState(null);
 
     // Available departments
     const departments = [
@@ -56,11 +58,13 @@ export default function UsersAdminPage() {
         { value: "admin", label: "Administrator", icon: "🛡️", color: "bg-red-50 text-red-700", description: "Full system access" }
     ];
 
-    // Auth check
+    // Auth check and load current user
     useEffect(() => {
         const user = JSON.parse(localStorage.getItem("user") || "null");
         if (!user || user.role !== "admin") {
             navigate("/login");
+        } else {
+            setCurrentAdmin(user);
         }
     }, [navigate]);
 
@@ -73,9 +77,13 @@ export default function UsersAdminPage() {
         setLoading(true);
         try {
             const res = await fetch(`${API_URL}/users`);
-            if (!res.ok) throw new Error("Failed to load users");
+            if (!res.ok) {
+                throw new Error(`Failed to load users (Status: ${res.status})`);
+            }
 
             const data = await res.json();
+            console.log("Users data loaded:", data);
+            
             const usersList = data.users || [];
             
             // Sort users
@@ -86,6 +94,7 @@ export default function UsersAdminPage() {
         } catch (err) {
             console.error("Failed to load users:", err);
             setError("Failed to load users. Please check your connection.");
+            setUsers([]);
         } finally {
             setLoading(false);
         }
@@ -98,24 +107,24 @@ export default function UsersAdminPage() {
             
             switch (sortBy) {
                 case "username":
-                    aValue = a.username?.toLowerCase() || "";
-                    bValue = b.username?.toLowerCase() || "";
+                    aValue = (a.username || "").toLowerCase();
+                    bValue = (b.username || "").toLowerCase();
                     break;
                 case "fullname":
-                    aValue = a.fullname?.toLowerCase() || "";
-                    bValue = b.fullname?.toLowerCase() || "";
+                    aValue = (a.fullname || "").toLowerCase();
+                    bValue = (b.fullname || "").toLowerCase();
                     break;
                 case "department":
-                    aValue = a.department?.toLowerCase() || "";
-                    bValue = b.department?.toLowerCase() || "";
+                    aValue = (a.department || "").toLowerCase();
+                    bValue = (b.department || "").toLowerCase();
                     break;
                 case "role":
-                    aValue = a.role?.toLowerCase() || "";
-                    bValue = b.role?.toLowerCase() || "";
+                    aValue = (a.role || "").toLowerCase();
+                    bValue = (b.role || "").toLowerCase();
                     break;
                 default:
-                    aValue = a.username?.toLowerCase() || "";
-                    bValue = b.username?.toLowerCase() || "";
+                    aValue = (a.username || "").toLowerCase();
+                    bValue = (b.username || "").toLowerCase();
             }
             
             if (sortOrder === "asc") {
@@ -134,6 +143,8 @@ export default function UsersAdminPage() {
             setSortBy(column);
             setSortOrder("asc");
         }
+        // Re-sort current users
+        setUsers(sortUsers(users));
     };
 
     // Calculate statistics
@@ -177,7 +188,7 @@ export default function UsersAdminPage() {
 
     // Check password strength
     const checkPasswordStrength = (password) => {
-        if (!password) return { score: 0, text: "No password", color: "text-gray-500", width: "0%" };
+        if (!password) return { score: 0, text: "No password", color: "text-gray-500", bgColor: "bg-gray-100", width: "0%" };
         
         let score = 0;
         if (password.length >= 8) score++;
@@ -212,6 +223,15 @@ export default function UsersAdminPage() {
         if (formData.username.length < 3) {
             showToast("Username must be at least 3 characters", "error");
             return false;
+        }
+
+        // Check if username already exists (only for new users)
+        if (!editingUser) {
+            const existingUser = users.find(u => u.username.toLowerCase() === formData.username.toLowerCase());
+            if (existingUser) {
+                showToast("Username already exists", "error");
+                return false;
+            }
         }
 
         if (!editingUser && !formData.password) {
@@ -255,6 +275,8 @@ export default function UsersAdminPage() {
                 userData.password = formData.password;
             }
 
+            console.log("Saving user data:", userData);
+
             const res = await fetch(`${API_URL}/users`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -263,7 +285,9 @@ export default function UsersAdminPage() {
 
             const data = await res.json();
 
-            if (!res.ok) throw new Error(data.error || "Operation failed");
+            if (!res.ok) {
+                throw new Error(data.error || "Operation failed");
+            }
 
             showToast(editingUser ? "User updated successfully" : "User created successfully");
             resetForm();
@@ -330,6 +354,12 @@ export default function UsersAdminPage() {
             return;
         }
 
+        // Check if user is trying to delete themselves
+        if (currentAdmin && user.username === currentAdmin.username) {
+            showToast("You cannot delete your own account", "error");
+            return;
+        }
+
         if (user.role === "admin") {
             const admins = users.filter(u => u.role === "admin");
             if (admins.length <= 1) {
@@ -365,10 +395,10 @@ export default function UsersAdminPage() {
         if (searchTerm) {
             const term = searchTerm.toLowerCase();
             const matches =
-                user.username.toLowerCase().includes(term) ||
+                (user.username && user.username.toLowerCase().includes(term)) ||
                 (user.fullname && user.fullname.toLowerCase().includes(term)) ||
-                user.department.toLowerCase().includes(term) ||
-                user.role.toLowerCase().includes(term);
+                (user.department && user.department.toLowerCase().includes(term)) ||
+                (user.role && user.role.toLowerCase().includes(term));
 
             if (!matches) return false;
         }
@@ -411,9 +441,29 @@ export default function UsersAdminPage() {
         }
     };
 
+    // Get initial for avatar
+    const getInitial = (username) => {
+        if (!username) return "?";
+        return username.charAt(0).toUpperCase();
+    };
+
+    // Get avatar color
+    const getAvatarColor = (department) => {
+        switch(department) {
+            case "ARCH": return "bg-gradient-to-r from-blue-500 to-blue-600";
+            case "ST": return "bg-gradient-to-r from-green-500 to-green-600";
+            case "ELECT": return "bg-gradient-to-r from-purple-500 to-purple-600";
+            case "MEP": return "bg-gradient-to-r from-amber-500 to-amber-600";
+            case "SURV": return "bg-gradient-to-r from-indigo-500 to-indigo-600";
+            case "Admin": return "bg-gradient-to-r from-red-500 to-red-600";
+            default: return "bg-gradient-to-r from-gray-500 to-gray-600";
+        }
+    };
+
     if (loading) {
         return (
             <>
+                <Navbar />
                 <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
                     <div className="text-center">
                         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
@@ -429,13 +479,14 @@ export default function UsersAdminPage() {
 
     return (
         <>
+            <Navbar />
 
             {/* Toast Notification */}
             {toast.show && (
-                <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium animate-in fade-in slide-in-from-top-5 ${toast.type === "error" ? "bg-red-600" : "bg-green-600"
+                <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium animate-in fade-in slide-in-from-top-5 ${toast.type === "error" ? "bg-red-600" : toast.type === "warning" ? "bg-amber-600" : "bg-green-600"
                     }`}>
                     <div className="flex items-center gap-2">
-                        {toast.type === "error" ? "❌" : "✅"}
+                        {toast.type === "error" ? "❌" : toast.type === "warning" ? "⚠️" : "✅"}
                         {toast.message}
                     </div>
                 </div>
@@ -453,12 +504,14 @@ export default function UsersAdminPage() {
                                 <p className="text-gray-600">
                                     Full control over system users, roles, permissions, and passwords
                                 </p>
-                                <div className="flex items-center gap-4 mt-3">
-                                    <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
-                                        <span className="text-sm text-gray-600">Administrative Access</span>
+                                {currentAdmin && (
+                                    <div className="flex items-center gap-2 mt-2">
+                                        <div className={`w-3 h-3 rounded-full ${getAvatarColor(currentAdmin.department).replace('bg-gradient-to-r ', 'bg-')}`}></div>
+                                        <span className="text-sm text-gray-600">
+                                            Logged in as: <span className="font-semibold">{currentAdmin.fullname || currentAdmin.username}</span>
+                                        </span>
                                     </div>
-                                </div>
+                                )}
                             </div>
                             <div className="flex items-center gap-4">
                                 <button
@@ -522,10 +575,10 @@ export default function UsersAdminPage() {
                                                     ? "bg-gray-100 text-gray-500 cursor-not-allowed"
                                                     : "border-gray-300 focus:border-blue-500"
                                                 }`}
-                                            placeholder="Enter username (letters, numbers, underscores)"
+                                            placeholder="Enter username"
                                         />
                                         <p className="text-xs text-gray-500 mt-1">
-                                            Minimum 3 characters. Cannot be changed later.
+                                            {editingUser ? "Username cannot be changed" : "Minimum 3 characters, letters, numbers, underscores"}
                                         </p>
                                     </div>
 
@@ -850,6 +903,16 @@ export default function UsersAdminPage() {
                                                     <button onClick={() => setDeptFilter("all")} className="text-green-600 hover:text-green-800">×</button>
                                                 </span>
                                             )}
+                                            <button
+                                                onClick={() => {
+                                                    setSearchTerm("");
+                                                    setRoleFilter("all");
+                                                    setDeptFilter("all");
+                                                }}
+                                                className="text-sm text-gray-600 hover:text-gray-800 ml-2"
+                                            >
+                                                Clear all
+                                            </button>
                                         </div>
                                     </div>
                                 )}
@@ -956,7 +1019,7 @@ export default function UsersAdminPage() {
                                                 {filteredUsers.map((user) => {
                                                     const roleInfo = getRoleInfo(user.role);
                                                     const deptInfo = getDeptInfo(user.department);
-                                                    const currentUser = JSON.parse(localStorage.getItem("user") || "{}");
+                                                    const isCurrentUser = currentAdmin && user.username === currentAdmin.username;
 
                                                     return (
                                                         <tr
@@ -966,15 +1029,20 @@ export default function UsersAdminPage() {
                                                             {/* User Info */}
                                                             <td className="p-4">
                                                                 <div className="flex items-center gap-3">
-                                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center font-bold ${getDeptColor(user.department)}`}>
-                                                                        {user.username.charAt(0).toUpperCase()}
+                                                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center text-white font-bold ${getAvatarColor(user.department)}`}>
+                                                                        {getInitial(user.username)}
                                                                     </div>
                                                                     <div>
-                                                                        <div className="font-bold text-gray-800">
+                                                                        <div className="font-bold text-gray-800 flex items-center gap-2">
                                                                             {user.username}
+                                                                            {isCurrentUser && (
+                                                                                <span className="px-2 py-0.5 bg-blue-100 text-blue-800 text-xs rounded-full">
+                                                                                    You
+                                                                                </span>
+                                                                            )}
                                                                         </div>
                                                                         <div className="text-xs text-gray-500">
-                                                                            Created: {formatDate(user.createdAt) || "Unknown"}
+                                                                            ID: {user.username}
                                                                         </div>
                                                                     </div>
                                                                 </div>
@@ -1018,9 +1086,9 @@ export default function UsersAdminPage() {
                                                             {/* Status */}
                                                             <td className="p-4">
                                                                 <div className="flex items-center gap-2">
-                                                                    <div className={`w-2 h-2 rounded-full ${user.username === currentUser.username ? "bg-green-500 animate-pulse" : "bg-green-500"}`}></div>
+                                                                    <div className={`w-2 h-2 rounded-full ${isCurrentUser ? "bg-green-500 animate-pulse" : "bg-green-500"}`}></div>
                                                                     <span className="text-sm text-gray-600">
-                                                                        {user.username === currentUser.username ? "You (Online)" : "Active"}
+                                                                        {isCurrentUser ? "You (Online)" : "Active"}
                                                                     </span>
                                                                 </div>
                                                                 {user.lastLogin && (
@@ -1050,7 +1118,7 @@ export default function UsersAdminPage() {
                                                                         <span>🔑</span>
                                                                         <span className="hidden sm:inline">Reset PW</span>
                                                                     </button>
-                                                                    {user.role !== "admin" || stats.admins > 1 ? (
+                                                                    {!isCurrentUser && (user.role !== "admin" || stats.admins > 1) ? (
                                                                         <button
                                                                             onClick={() => handleDeleteUser(user)}
                                                                             disabled={actionLoading}
@@ -1067,7 +1135,7 @@ export default function UsersAdminPage() {
                                                                         <button
                                                                             disabled
                                                                             className="px-4 py-2 bg-gray-100 text-gray-400 rounded-lg font-medium cursor-not-allowed flex items-center gap-2"
-                                                                            title="Cannot delete the only administrator"
+                                                                            title={isCurrentUser ? "Cannot delete your own account" : "Cannot delete the only administrator"}
                                                                         >
                                                                             <span>🛡️</span>
                                                                             <span className="hidden sm:inline">Protected</span>
@@ -1097,7 +1165,10 @@ export default function UsersAdminPage() {
                                                     <select
                                                         className="ml-1 border rounded px-2 py-1"
                                                         value={sortBy}
-                                                        onChange={(e) => setSortBy(e.target.value)}
+                                                        onChange={(e) => {
+                                                            setSortBy(e.target.value);
+                                                            setUsers(sortUsers(users));
+                                                        }}
                                                     >
                                                         <option value="username">Username</option>
                                                         <option value="fullname">Full Name</option>
@@ -1107,7 +1178,10 @@ export default function UsersAdminPage() {
                                                     <select
                                                         className="ml-1 border rounded px-2 py-1"
                                                         value={sortOrder}
-                                                        onChange={(e) => setSortOrder(e.target.value)}
+                                                        onChange={(e) => {
+                                                            setSortOrder(e.target.value);
+                                                            setUsers(sortUsers(users));
+                                                        }}
                                                     >
                                                         <option value="asc">Ascending</option>
                                                         <option value="desc">Descending</option>
@@ -1197,17 +1271,4 @@ export default function UsersAdminPage() {
             </div>
         </>
     );
-}
-
-// Helper function
-function getDeptColor(dept) {
-    switch(dept) {
-        case "ARCH": return "bg-blue-100 text-blue-800";
-        case "ST": return "bg-green-100 text-green-800";
-        case "ELECT": return "bg-purple-100 text-purple-800";
-        case "MEP": return "bg-amber-100 text-amber-800";
-        case "SURV": return "bg-indigo-100 text-indigo-800";
-        case "Admin": return "bg-red-100 text-red-800";
-        default: return "bg-gray-100 text-gray-800";
-    }
 }

@@ -1,8 +1,13 @@
-// DcArchive.jsx - النسخة النهائية المحسنة
-import { useEffect, useState } from "react";
+// DcArchive.jsx - النسخة النهائية المحسنة بدون Sidebar
+import { useEffect, useState, useCallback, memo } from "react";
 import { API_URL } from "../config";
 import { useNavigate } from "react-router-dom";
-import SidebarComponent from "../components/SidebarComponent";
+import { 
+    formatIrNumber, 
+    getDepartmentAbbr,
+    formatDate,
+    formatShortDate 
+} from "../utils/formatters";
 
 export default function DcArchive() {
     const navigate = useNavigate();
@@ -14,16 +19,8 @@ export default function DcArchive() {
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
     const [toast, setToast] = useState("");
     
-    // فلاتر الـ Sidebar
-    const [sidebarFilters, setSidebarFilters] = useState({
-        project: "all",
-        department: "all",
-        type: "all",
-        status: "all"
-    });
-
-    // Advanced Filters
-    const [advancedFilters, setAdvancedFilters] = useState({
+    // Advanced Filters فقط (بدون sidebar)
+    const [filters, setFilters] = useState({
         project: "all",
         type: "all",
         status: "all",
@@ -41,11 +38,7 @@ export default function DcArchive() {
     }, [navigate]);
 
     // Load Archived IRs for DC
-    useEffect(() => {
-        loadArchive();
-    }, []);
-
-    async function loadArchive() {
+    const loadArchive = useCallback(async () => {
         setLoading(true);
         try {
             const res = await fetch(`${API_URL}/archive/dc`);
@@ -69,7 +62,8 @@ export default function DcArchive() {
                             `REV-${item.revisionType === "CPR_REVISION" ? "CPR-" : "IR-"}${item.userRevNumber}` : 
                             item.revNo),
                     isCPRRevision: item.revisionType === "CPR_REVISION" || item.isCPRRevision,
-                    isIRRevision: item.revisionType === "IR_REVISION" || item.isIRRevision
+                    isIRRevision: item.revisionType === "IR_REVISION" || item.isIRRevision,
+                    departmentAbbr: getDepartmentAbbr(item.department)
                 }));
                 setItems(formatted);
             }
@@ -79,66 +73,25 @@ export default function DcArchive() {
         } finally {
             setLoading(false);
         }
-    }
+    }, []);
+
+    useEffect(() => {
+        loadArchive();
+    }, [loadArchive]);
 
     // Helper Functions
-    function getDepartmentAbbr(department) {
-        if (!department) return "";
-        const dept = department.toUpperCase();
-        if (dept.includes("ARCH")) return "ARCH";
-        if (dept.includes("CIVIL") || dept.includes("STRUCT")) return "ST";
-        if (dept.includes("ELECT")) return "ELECT";
-        if (dept.includes("MEP") || dept.includes("MECH")) return "MEP";
-        if (dept.includes("SURV")) return "SURV";
-        if (dept.includes("REV")) return "REV";
-        return dept.substring(0, 4);
-    }
-
-    const formatDate = (dateStr) => {
-        if (!dateStr) return "—";
-        try {
-            const date = new Date(dateStr);
-            if (isNaN(date)) return dateStr;
-            return new Intl.DateTimeFormat("en-GB", {
-                day: "2-digit",
-                month: "short",
-                year: "numeric"
-            }).format(date) + "\n" + 
-            new Intl.DateTimeFormat("en-GB", {
-                hour: "2-digit",
-                minute: "2-digit"
-            }).format(date);
-        } catch {
-            return dateStr;
-        }
-    };
-
-    const formatShortDate = (dateStr) => {
-        if (!dateStr) return "";
-        try {
-            const date = new Date(dateStr);
-            if (isNaN(date)) return dateStr;
-            return new Intl.DateTimeFormat("en-GB", {
-                day: "2-digit",
-                month: "short"
-            }).format(date);
-        } catch {
-            return dateStr;
-        }
-    };
-
-    const showToastMessage = (msg) => {
+    const showToastMessage = useCallback((msg) => {
         setToast(msg);
         setTimeout(() => setToast(""), 3000);
-    };
+    }, []);
 
-    const getStatusClass = (item) => {
+    const getStatusClass = useCallback((item) => {
         if (item.isDone) return "bg-green-100 text-green-800 border border-green-300";
         if (item.isRevision) return "bg-amber-100 text-amber-800 border border-amber-300";
         return "bg-yellow-100 text-yellow-800 border border-yellow-300";
-    };
+    }, []);
 
-    const getTypeClass = (item) => {
+    const getTypeClass = useCallback((item) => {
         if (item.isRevision) {
             if (item.revisionType === "CPR_REVISION" || item.isCPRRevision) {
                 return "bg-green-100 text-green-800 border border-green-300";
@@ -147,9 +100,9 @@ export default function DcArchive() {
         }
         if (item.requestType === "CPR") return "bg-green-100 text-green-800 border border-green-300";
         return "bg-blue-100 text-blue-800 border border-blue-300";
-    };
+    }, []);
 
-    const getDeptClass = (dept) => {
+    const getDeptClass = useCallback((dept) => {
         switch (dept) {
             case "ARCH": return "bg-blue-100 text-blue-800";
             case "ST": return "bg-green-100 text-green-800";
@@ -158,15 +111,15 @@ export default function DcArchive() {
             case "SURV": return "bg-indigo-100 text-indigo-800";
             default: return "bg-gray-100 text-gray-800";
         }
-    };
+    }, []);
 
-    const getArchivedByClass = (archivedBy) => {
+    const getArchivedByClass = useCallback((archivedBy) => {
         if (archivedBy === "dc") return "bg-blue-100 text-blue-800";
         if (archivedBy === "engineer") return "bg-green-100 text-green-800";
         return "bg-gray-100 text-gray-800";
-    };
+    }, []);
 
-    const getRevDisplayNumber = (rev) => {
+    const getRevDisplayNumber = useCallback((rev) => {
         if (!rev) return "REV";
         if (rev.displayNumber) return rev.displayNumber;
         if (rev.userRevNumber) {
@@ -178,74 +131,46 @@ export default function DcArchive() {
             return `${prefix}${rev.revText}`;
         }
         return rev.revNo || "REV";
-    };
+    }, []);
 
-    const getRevTypeText = (rev) => {
+    const getRevTypeText = useCallback((rev) => {
         if (!rev) return "REVISION";
         if (rev.revisionType === "CPR_REVISION" || rev.isCPRRevision) {
             return "CPR REVISION";
         } else {
             return "IR REVISION";
         }
-    };
+    }, []);
 
     // Filter and search logic
     const filteredItems = items.filter(item => {
-        // Filter by project from Sidebar
-        if (sidebarFilters.project !== "all" && item.project !== sidebarFilters.project) return false;
-        
-        // Filter by department from Sidebar
-        if (sidebarFilters.department !== "all") {
-            const dept = getDepartmentAbbr(item.department);
-            if (dept !== sidebarFilters.department) return false;
-        }
-        
-        // Filter by type from Sidebar
-        if (sidebarFilters.type !== "all") {
-            if (sidebarFilters.type === "ir" && item.isRevision) return false;
-            if (sidebarFilters.type === "revision" && !item.isRevision) return false;
-            if (sidebarFilters.type === "cpr") {
-                if (item.isRevision) {
-                    if (item.revisionType !== "CPR_REVISION" && !item.isCPRRevision) return false;
-                } else {
-                    if (item.requestType !== "CPR") return false;
-                }
-            }
-        }
-        
-        // Filter by status from Sidebar
-        if (sidebarFilters.status !== "all") {
-            if (sidebarFilters.status === "completed" && !item.isDone) return false;
-            if (sidebarFilters.status === "pending" && item.isDone) return false;
-        }
-        
         // Advanced Filters
-        if (advancedFilters.project !== "all" && item.project !== advancedFilters.project) return false;
+        if (filters.project !== "all" && item.project !== filters.project) return false;
         
-        if (advancedFilters.type !== "all") {
-            if (advancedFilters.type === "ir" && (item.isRevision || item.requestType === "CPR")) return false;
-            if (advancedFilters.type === "cpr" && (!item.isCPR || item.isRevision)) return false;
-            if (advancedFilters.type === "revision" && !item.isRevision) return false;
+        if (filters.type !== "all") {
+            if (filters.type === "ir" && (item.isRevision || item.requestType === "CPR")) return false;
+            if (filters.type === "cpr" && (!item.isCPR || item.isRevision)) return false;
+            if (filters.type === "revision" && !item.isRevision) return false;
         }
         
-        if (advancedFilters.status !== "all") {
-            if (advancedFilters.status === "pending" && item.isDone) return false;
-            if (advancedFilters.status === "completed" && !item.isDone) return false;
+        if (filters.status !== "all") {
+            if (filters.status === "pending" && item.isDone) return false;
+            if (filters.status === "completed" && !item.isDone) return false;
         }
         
-        if (advancedFilters.department !== "all") {
+        if (filters.department !== "all") {
             const dept = getDepartmentAbbr(item.department);
-            if (dept !== advancedFilters.department) return false;
+            if (dept !== filters.department) return false;
         }
         
-        if (advancedFilters.archivedBy !== "all" && item.archivedBy !== advancedFilters.archivedBy) return false;
+        if (filters.archivedBy !== "all" && item.archivedBy !== filters.archivedBy) return false;
         
         // Filter by date range
-        if (advancedFilters.dateRange !== "all") {
+        if (filters.dateRange !== "all") {
             const itemDate = new Date(item.archivedDate || item.sentAt);
             const today = new Date();
             
-            switch (advancedFilters.dateRange) {
+            switch (filters.dateRange) {
                 case "today":
                     if (itemDate.toDateString() !== today.toDateString()) return false;
                     break;
@@ -296,7 +221,7 @@ export default function DcArchive() {
     const archivedByOptions = [...new Set(items.map(item => item.archivedBy).filter(Boolean))].sort();
 
     // Action Handlers
-    async function handleRestore(item) {
+    const handleRestore = useCallback(async (item) => {
         if (!window.confirm(`Restore ${formatIrNumber(item.irNo)} from archive?`)) return;
 
         setRestoring(prev => ({ ...prev, [item.irNo]: true }));
@@ -324,49 +249,83 @@ export default function DcArchive() {
         } finally {
             setRestoring(prev => ({ ...prev, [item.irNo]: false }));
         }
-    }
+    }, []);
 
-    async function handleDelete(item) {
-        setDeleting(prev => ({ ...prev, [item.irNo]: true }));
+const handleDelete = useCallback(async (item) => {
+    setDeleting(prev => ({ ...prev, [item.irNo]: true }));
 
-        try {
-            // Determine endpoint based on item type
-            const isRevision = item.isRevision || false;
-            const endpoint = isRevision ? `${API_URL}/revs` : `${API_URL}/irs`;
-            const itemIdentifier = isRevision ? 'revNo' : 'irNo';
-            const itemId = item[itemIdentifier] || item.irNo;
+    try {
+        // Determine endpoint based on item type
+        const isRevision = item.isRevision || false;
+        const endpoint = isRevision ? `${API_URL}/revs/delete` : `${API_URL}/irs/delete`;
+        const itemIdentifier = isRevision ? 'revNo' : 'irNo';
+        const itemId = item[itemIdentifier] || item.irNo;
 
-            // Delete from database
-            const res = await fetch(`${endpoint}?${itemIdentifier}=${encodeURIComponent(itemId)}`, { 
-                method: "DELETE",
-                headers: { "Content-Type": "application/json" }
-            });
-            
-            const data = await res.json();
-            
-            if (!res.ok) throw new Error(data.error || "Delete failed");
+        console.log(`🔄 Deleting item: ${itemId}, Type: ${isRevision ? 'Revision' : 'IR'}`);
 
-            // Update state locally
-            setItems(prev => prev.filter(x => x.irNo !== item.irNo));
-            showToastMessage("🗑️ Item deleted permanently!");
-            
-        } catch (err) {
-            console.error("Delete error:", err);
-            showToastMessage(`❌ Delete failed: ${err.message}`);
-        } finally {
-            setDeleting(prev => ({ ...prev, [item.irNo]: false }));
-            setShowDeleteConfirm(null);
-        }
-    }
-
-    const resetAllFilters = () => {
-        setSidebarFilters({
-            project: "all",
-            department: "all",
-            type: "all",
-            status: "all"
+        // Delete from database using POST method with body
+        const res = await fetch(endpoint, { 
+            method: "POST", // استخدام POST بدلاً من DELETE
+            headers: { 
+                "Content-Type": "application/json",
+                "Accept": "application/json"
+            },
+            body: JSON.stringify({
+                [itemIdentifier]: itemId,
+                role: "dc"
+            })
         });
-        setAdvancedFilters({
+
+        console.log(`📥 Delete response status: ${res.status}`);
+        
+        // Check if response is OK
+        if (!res.ok) {
+            let errorMessage = `Delete failed: ${res.status} ${res.statusText}`;
+            try {
+                const contentType = res.headers.get("content-type");
+                if (contentType && contentType.includes("application/json")) {
+                    const errorData = await res.json();
+                    errorMessage = errorData.error || errorData.message || errorMessage;
+                } else {
+                    const text = await res.text();
+                    errorMessage = text || errorMessage;
+                }
+            } catch (parseError) {
+                console.error("Error parsing error response:", parseError);
+            }
+            throw new Error(errorMessage);
+        }
+
+        // Try to parse JSON response
+        let data;
+        try {
+            const contentType = res.headers.get("content-type");
+            if (contentType && contentType.includes("application/json")) {
+                data = await res.json();
+            } else {
+                data = { success: true, message: "Item deleted successfully" };
+            }
+        } catch (parseError) {
+            console.warn("Could not parse response as JSON, assuming success");
+            data = { success: true, message: "Item deleted successfully" };
+        }
+
+        // Update state locally
+        setItems(prev => prev.filter(x => x.irNo !== item.irNo));
+        showToastMessage("🗑️ Item deleted permanently!");
+        console.log("✅ Delete successful:", data);
+        
+    } catch (err) {
+        console.error("❌ Delete error:", err);
+        showToastMessage(`❌ Delete failed: ${err.message}`);
+    } finally {
+        setDeleting(prev => ({ ...prev, [item.irNo]: false }));
+        setShowDeleteConfirm(null);
+    }
+}, []);
+
+    const resetAllFilters = useCallback(() => {
+        setFilters({
             project: "all",
             type: "all",
             status: "all",
@@ -375,7 +334,7 @@ export default function DcArchive() {
             archivedBy: "all"
         });
         setSearchTerm("");
-    };
+    }, []);
 
     // Calculate stats
     const stats = {
@@ -409,7 +368,7 @@ export default function DcArchive() {
         )
     );
 
-    const DeleteConfirmationModal = () => {
+    const DeleteConfirmationModal = memo(() => {
         if (!showDeleteConfirm) return null;
         
         const { item } = showDeleteConfirm;
@@ -486,123 +445,9 @@ export default function DcArchive() {
                 </div>
             </div>
         );
-    };
+    });
 
-    const ArchiveStats = () => (
-        <div className="mt-6 bg-white rounded-xl shadow-lg border border-gray-200 p-4">
-            <h4 className="font-semibold text-gray-700 mb-3">📊 Archive Stats</h4>
-            <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Total Archived</span>
-                    <span className="font-bold">{stats.total}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">IR Requests</span>
-                    <span className="font-bold text-blue-600">{stats.irs}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">CPR Requests</span>
-                    <span className="font-bold text-green-600">{stats.cpr}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Total Revisions</span>
-                    <span className="font-bold text-purple-600">{stats.revisions}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">IR Revisions</span>
-                    <span className="font-bold text-amber-600">{stats.irRevisions}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">CPR Revisions</span>
-                    <span className="font-bold text-green-600">{stats.cprRevisions}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Archived by DC</span>
-                    <span className="font-bold text-blue-600">{stats.archivedByDC}</span>
-                </div>
-                <div className="flex justify-between items-center">
-                    <span className="text-sm text-gray-600">Archived by Engineer</span>
-                    <span className="font-bold text-green-600">{stats.archivedByEngineer}</span>
-                </div>
-            </div>
-        </div>
-    );
-
-    const ActiveFilters = () => (
-        <div className="mt-6 bg-white rounded-xl shadow-lg border border-gray-200 p-4">
-            <h4 className="font-semibold text-gray-700 mb-3">🎯 Active Filters</h4>
-            <div className="space-y-2">
-                {(sidebarFilters.project !== "all" || advancedFilters.project !== "all") && (
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Project:</span>
-                        <span className="text-sm font-medium bg-blue-100 text-blue-700 px-2 py-1 rounded">
-                            {sidebarFilters.project !== "all" ? sidebarFilters.project : advancedFilters.project}
-                        </span>
-                    </div>
-                )}
-                {(sidebarFilters.department !== "all" || advancedFilters.department !== "all") && (
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Department:</span>
-                        <span className="text-sm font-medium bg-green-100 text-green-700 px-2 py-1 rounded">
-                            {sidebarFilters.department !== "all" ? sidebarFilters.department : advancedFilters.department}
-                        </span>
-                    </div>
-                )}
-                {(sidebarFilters.type !== "all" || advancedFilters.type !== "all") && (
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Type:</span>
-                        <span className={`text-sm font-medium px-2 py-1 rounded ${
-                            (sidebarFilters.type === "cpr" || advancedFilters.type === "cpr") ? "bg-green-100 text-green-700" :
-                            (sidebarFilters.type === "revision" || advancedFilters.type === "revision") ? "bg-amber-100 text-amber-700" :
-                            "bg-blue-100 text-blue-700"
-                        }`}>
-                            {sidebarFilters.type !== "all" ? 
-                                (sidebarFilters.type === "cpr" ? "CPR Only" :
-                                 sidebarFilters.type === "revision" ? "Revisions Only" :
-                                 "IR Only") :
-                                (advancedFilters.type === "cpr" ? "CPR Only" :
-                                 advancedFilters.type === "revision" ? "Revisions Only" :
-                                 "IR Only")
-                            }
-                        </span>
-                    </div>
-                )}
-                {(sidebarFilters.status !== "all" || advancedFilters.status !== "all") && (
-                    <div className="flex items-center justify-between">
-                        <span className="text-sm text-gray-600">Status:</span>
-                        <span className={`text-sm font-medium px-2 py-1 rounded ${
-                            (sidebarFilters.status === "pending" || advancedFilters.status === "pending") ? "bg-yellow-100 text-yellow-700" :
-                            "bg-green-100 text-green-700"
-                        }`}>
-                            {sidebarFilters.status !== "all" ? 
-                                (sidebarFilters.status === "pending" ? "Pending" : "Completed") :
-                                (advancedFilters.status === "pending" ? "Pending" : "Completed")
-                            }
-                        </span>
-                    </div>
-                )}
-                {(sidebarFilters.project !== "all" || 
-                  sidebarFilters.department !== "all" || 
-                  sidebarFilters.type !== "all" || 
-                  sidebarFilters.status !== "all" ||
-                  advancedFilters.project !== "all" ||
-                  advancedFilters.department !== "all" ||
-                  advancedFilters.type !== "all" ||
-                  advancedFilters.status !== "all" ||
-                  advancedFilters.dateRange !== "all" ||
-                  advancedFilters.archivedBy !== "all") && (
-                    <button
-                        onClick={resetAllFilters}
-                        className="w-full mt-2 p-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg text-sm transition"
-                    >
-                        🗑️ Clear All Filters
-                    </button>
-                )}
-            </div>
-        </div>
-    );
-
-    const MainStatsCards = () => (
+    const MainStatsCards = memo(() => (
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
             <div className="bg-white rounded-xl shadow p-4 text-center">
                 <div className="text-2xl font-bold text-gray-800">{filteredItems.length}</div>
@@ -627,9 +472,9 @@ export default function DcArchive() {
                 <div className="text-sm text-gray-500">Archived by DC</div>
             </div>
         </div>
-    );
+    ));
 
-    const SearchBar = () => (
+    const SearchBar = memo(() => (
         <div className="bg-white rounded-xl shadow p-6 mb-6">
             <div className="flex flex-col md:flex-row gap-4 items-end">
                 <div className="flex-1">
@@ -639,14 +484,15 @@ export default function DcArchive() {
                     <input
                         type="text"
                         placeholder="Search by number, description, user, project, archived by, downloaded by..."
-                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500"
+                        className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
                         value={searchTerm}
                         onChange={(e) => setSearchTerm(e.target.value)}
+                        autoComplete="off"
                     />
                 </div>
                 <button
                     onClick={() => setSearchTerm("")}
-                    className="px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium"
+                    className="px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition"
                 >
                     Clear Search
                 </button>
@@ -656,24 +502,17 @@ export default function DcArchive() {
                 <p>💡 Tips: Search by archived by (e.g., "dc"), downloaded by (e.g., "username"), project, or item type</p>
             </div>
         </div>
-    );
+    ));
 
-    const AdvancedFiltersSection = () => (
+    const AdvancedFiltersSection = memo(() => (
         <div className="bg-white rounded-xl shadow p-6 mb-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center mb-4 gap-4">
-                <h3 className="text-lg font-bold text-gray-800">🎯 Advanced Filters</h3>
+                <h3 className="text-lg font-bold text-gray-800">🎯 Filters</h3>
                 <button
-                    onClick={() => setAdvancedFilters({
-                        project: "all",
-                        type: "all",
-                        status: "all",
-                        dateRange: "all",
-                        department: "all",
-                        archivedBy: "all"
-                    })}
+                    onClick={resetAllFilters}
                     className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg text-sm"
                 >
-                    Reset Advanced Filters
+                    Reset All Filters
                 </button>
             </div>
             
@@ -681,9 +520,9 @@ export default function DcArchive() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Project</label>
                     <select
-                        value={advancedFilters.project}
-                        onChange={(e) => setAdvancedFilters(prev => ({...prev, project: e.target.value}))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.project}
+                        onChange={(e) => setFilters(prev => ({...prev, project: e.target.value}))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All Projects</option>
                         {projects.map(project => (
@@ -695,9 +534,9 @@ export default function DcArchive() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Type</label>
                     <select
-                        value={advancedFilters.type}
-                        onChange={(e) => setAdvancedFilters(prev => ({...prev, type: e.target.value}))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.type}
+                        onChange={(e) => setFilters(prev => ({...prev, type: e.target.value}))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All Types</option>
                         <option value="ir">IR Only</option>
@@ -709,9 +548,9 @@ export default function DcArchive() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Date Range</label>
                     <select
-                        value={advancedFilters.dateRange}
-                        onChange={(e) => setAdvancedFilters(prev => ({...prev, dateRange: e.target.value}))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.dateRange}
+                        onChange={(e) => setFilters(prev => ({...prev, dateRange: e.target.value}))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All Dates</option>
                         <option value="today">Today</option>
@@ -723,9 +562,9 @@ export default function DcArchive() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Status</label>
                     <select
-                        value={advancedFilters.status}
-                        onChange={(e) => setAdvancedFilters(prev => ({...prev, status: e.target.value}))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.status}
+                        onChange={(e) => setFilters(prev => ({...prev, status: e.target.value}))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All Status</option>
                         <option value="pending">Pending</option>
@@ -736,9 +575,9 @@ export default function DcArchive() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Department</label>
                     <select
-                        value={advancedFilters.department}
-                        onChange={(e) => setAdvancedFilters(prev => ({...prev, department: e.target.value}))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.department}
+                        onChange={(e) => setFilters(prev => ({...prev, department: e.target.value}))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All Departments</option>
                         {departments.map(dept => (
@@ -750,9 +589,9 @@ export default function DcArchive() {
                 <div>
                     <label className="block text-sm font-medium text-gray-700 mb-1">Archived By</label>
                     <select
-                        value={advancedFilters.archivedBy}
-                        onChange={(e) => setAdvancedFilters(prev => ({...prev, archivedBy: e.target.value}))}
-                        className="w-full p-2 border rounded-lg bg-white"
+                        value={filters.archivedBy}
+                        onChange={(e) => setFilters(prev => ({...prev, archivedBy: e.target.value}))}
+                        className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
                     >
                         <option value="all">All</option>
                         {archivedByOptions.map(by => (
@@ -762,9 +601,9 @@ export default function DcArchive() {
                 </div>
             </div>
         </div>
-    );
+    ));
 
-    const EmptyArchiveState = () => (
+    const EmptyArchiveState = memo(() => (
         <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center shadow-sm">
             <div className="text-gray-400 text-6xl mb-4">📁</div>
             <h3 className="text-xl font-semibold text-gray-700 mb-2">Archive is Empty</h3>
@@ -776,9 +615,9 @@ export default function DcArchive() {
                 Go to DC Dashboard
             </button>
         </div>
-    );
+    ));
 
-    const NoMatchingItemsState = () => (
+    const NoMatchingItemsState = memo(() => (
         <div className="bg-white border border-gray-200 rounded-2xl p-12 text-center shadow-sm">
             <div className="text-gray-400 text-6xl mb-4">🔍</div>
             <h3 className="text-xl font-semibold text-gray-700 mb-2">No Matching Items</h3>
@@ -790,9 +629,9 @@ export default function DcArchive() {
                 Clear All Filters
             </button>
         </div>
-    );
+    ));
 
-    const ArchiveTableRow = ({ item }) => {
+    const ArchiveTableRow = memo(({ item }) => {
         const deptAbbr = getDepartmentAbbr(item.department);
         const revTypeText = getRevTypeText(item);
         const displayNumber = item.isRevision ? getRevDisplayNumber(item) : formatIrNumber(item.irNo);
@@ -945,9 +784,9 @@ export default function DcArchive() {
                 </td>
             </tr>
         );
-    };
+    });
 
-    const ProjectSection = ({ project, items }) => (
+    const ProjectSection = memo(({ project, items }) => (
         <div className="bg-white rounded-2xl overflow-hidden shadow-lg border border-gray-200">
             <div className="bg-gradient-to-r from-gray-800 to-gray-700 text-white p-6">
                 <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -991,8 +830,8 @@ export default function DcArchive() {
                         </tr>
                     </thead>
                     <tbody>
-                        {items.map((item) => (
-                            <ArchiveTableRow key={item.irNo} item={item} />
+                        {items.map((item, index) => (
+                            <ArchiveTableRow key={`${item.irNo}-${index}`} item={item} />
                         ))}
                     </tbody>
                 </table>
@@ -1011,37 +850,9 @@ export default function DcArchive() {
                 </div>
             </div>
         </div>
-    );
+    ));
 
-    const ArchiveInfo = () => (
-        items.length > 0 && (
-            <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-4">
-                <div className="flex items-start gap-3">
-                    <div className="text-blue-500 text-2xl">ℹ️</div>
-                    <div>
-                        <h4 className="font-bold text-blue-800 mb-1">Archive Information</h4>
-                        <p className="text-blue-700 text-sm">
-                            • Archived items are moved here from the main dashboard<br/>
-                            • You can restore items back to the main dashboard<br/>
-                            • Permanent delete removes items completely from the system<br/>
-                            • Items are archived by DC or Engineers<br/>
-                            • "Downloaded by" shows who downloaded the Word file
-                        </p>
-                    </div>
-                </div>
-            </div>
-        )
-    );
-
-    const Footer = () => (
-        <div className="max-w-7xl mx-auto px-4 py-6 text-center text-gray-500 text-sm border-t">
-            <div className="flex flex-col md:flex-row justify-between items-center">
-                <p>DC Archive • Total Archived: {items.length} • Showing: {filteredItems.length}</p>
-                <p>Last Updated: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
-            </div>
-        </div>
-    );
-
+    // Main render
     if (loading) {
         return <LoadingScreen />;
     }
@@ -1051,87 +862,110 @@ export default function DcArchive() {
             <ToastNotification />
             <DeleteConfirmationModal />
             
-            <div className="mx-auto px-20 py-6">
-                <div className="flex flex-col lg:flex-row gap-6">
-                    {/* Sidebar */}
-                    <div className="lg:w-1/4">
-                        <SidebarComponent 
-                            onFilterChange={setSidebarFilters}
-                            initialFilters={sidebarFilters}
-                            showQuickActions={true}
-                            showProjectStats={true}
-                            showDeptStats={true}
-                        />
-                        
-                        <ArchiveStats />
-                        <ActiveFilters />
+            <div className="mx-auto px-4 md:px-8 lg:px-20 py-6">
+                {/* Header */}
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6 mb-6">
+                    <div>
+                        <h1 className="text-3xl md:text-4xl font-bold text-gray-800">
+                            📁 DC Archive
+                        </h1>
+                        <p className="text-gray-600 mt-2">
+                            Total Archived: <span className="font-bold text-blue-600">{items.length}</span>
+                            <span className="mx-3">•</span>
+                            Showing: <span className="font-bold text-green-600">{filteredItems.length}</span>
+                            <span className="mx-3">•</span>
+                            <button
+                                onClick={loadArchive}
+                                className="text-blue-500 hover:text-blue-700 font-medium"
+                            >
+                                🔄 Refresh
+                            </button>
+                        </p>
                     </div>
 
-                    {/* Main Content Area */}
-                    <div className="lg:w-3/4">
-                        <MainStatsCards />
-                        <SearchBar />
-                        <AdvancedFiltersSection />
-
-                        {/* Main Content */}
-                        {items.length === 0 ? (
-                            <EmptyArchiveState />
-                        ) : filteredItems.length === 0 ? (
-                            <NoMatchingItemsState />
-                        ) : (
-                            <div className="space-y-8">
-                                {Object.keys(grouped).map((project) => (
-                                    <ProjectSection 
-                                        key={project} 
-                                        project={project} 
-                                        items={grouped[project]} 
-                                    />
-                                ))}
-                            </div>
-                        )}
-
-                        <ArchiveInfo />
+                    <div className="flex items-center gap-4">
+                        <button
+                            onClick={() => navigate("/dc")}
+                            className="px-4 py-2 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition"
+                        >
+                            ← Back to Dashboard
+                        </button>
+                        <div className="text-sm bg-white/80 px-4 py-2 rounded-full shadow">
+                            Archive Management
+                        </div>
                     </div>
                 </div>
+
+                <MainStatsCards />
+                <SearchBar />
+                <AdvancedFiltersSection />
+
+                {/* Main Content */}
+                {items.length === 0 ? (
+                    <EmptyArchiveState />
+                ) : filteredItems.length === 0 ? (
+                    <NoMatchingItemsState />
+                ) : (
+                    <div className="space-y-8">
+                        {Object.keys(grouped).map((project) => (
+                            <ProjectSection 
+                                key={project} 
+                                project={project} 
+                                items={grouped[project]} 
+                            />
+                        ))}
+                    </div>
+                )}
+
+                {/* Archive Info */}
+                {items.length > 0 && (
+                    <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-6">
+                        <div className="flex items-start gap-3">
+                            <div className="text-blue-500 text-2xl">ℹ️</div>
+                            <div>
+                                <h4 className="font-bold text-blue-800 mb-2">Archive Information</h4>
+                                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                    <div className="bg-white/50 p-3 rounded-lg">
+                                        <p className="text-blue-700 text-sm font-medium">📁 Archive Operations</p>
+                                        <p className="text-blue-600 text-xs mt-1">
+                                            • Archived items are moved here from main dashboard<br/>
+                                            • Restore items back to main dashboard<br/>
+                                            • Permanent delete removes items completely<br/>
+                                            • Archived by DC or Engineers
+                                        </p>
+                                    </div>
+                                    <div className="bg-white/50 p-3 rounded-lg">
+                                        <p className="text-emerald-700 text-sm font-medium">📊 Statistics</p>
+                                        <p className="text-emerald-600 text-xs mt-1">
+                                            • Total: {stats.total} items<br/>
+                                            • IRs: {stats.irs}, CPRs: {stats.cpr}<br/>
+                                            • Revisions: {stats.revisions}<br/>
+                                            • Completed: {stats.completed}, Pending: {stats.pending}
+                                        </p>
+                                    </div>
+                                    <div className="bg-white/50 p-3 rounded-lg">
+                                        <p className="text-purple-700 text-sm font-medium">⚡ Quick Tips</p>
+                                        <p className="text-purple-600 text-xs mt-1">
+                                            • Use filters to find specific items<br/>
+                                            • Search by any field including downloaded by<br/>
+                                            • Restore items when needed<br/>
+                                            • Permanent delete is irreversible
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
 
-            <Footer />
+            {/* Footer */}
+            <div className="max-w-7xl mx-auto px-4 py-6 text-center text-gray-500 text-sm border-t">
+                <div className="flex flex-col md:flex-row justify-between items-center">
+                    <p>DC Archive • Total Archived: {items.length} • Showing: {filteredItems.length}</p>
+                    <p>Last Updated: {new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                </div>
+            </div>
         </div>
     );
-}
-
-/**
- * تنسيق رقم IR/CPR بشكل مختصر
- */
-function formatIrNumber(full) {
-    if (!full) return "";
-    try {
-        // إذا كان رقم CPR أو IR عادي
-        if (full.includes("BADYA-CON")) {
-            const parts = full.split("-");
-            if (parts.length >= 6) {
-                const project = parts[2] || "";
-                const type = parts[3] || "";
-                const dept = parts[4] || "";
-                const number = parts[5] || "";
-                
-                if (type === "CPR") {
-                    return `CPR-${project}-${dept}-${number}`;
-                }
-                return `${project}-${dept}-${number}`;
-            }
-        }
-        
-        // إذا كان رقم Revision
-        if (full.includes("REV-")) {
-            const revParts = full.split("-");
-            if (revParts.length >= 3) {
-                return `REV-${revParts[1]}-${revParts[2]}`;
-            }
-        }
-        
-        return full;
-    } catch {
-        return full;
-    }
-}
+}   

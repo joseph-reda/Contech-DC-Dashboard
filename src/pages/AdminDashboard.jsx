@@ -2,6 +2,7 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
+import Navbar from "../components/Navbar";
 
 export default function AdminDashboard() {
     const navigate = useNavigate();
@@ -23,19 +24,22 @@ export default function AdminDashboard() {
         api: "online",
         uptime: "0 days"
     });
+    const [user, setUser] = useState(null);
 
     // Auth check - Admin only access
     useEffect(() => {
-        const user = JSON.parse(localStorage.getItem("user") || "null");
-        if (!user) {
+        const storedUser = JSON.parse(localStorage.getItem("user") || "null");
+        if (!storedUser) {
             navigate("/login");
             return;
         }
         
+        setUser(storedUser);
+        
         // Allow admin access to all pages
-        if (user.role !== "admin") {
+        if (storedUser.role !== "admin") {
             // Redirect to appropriate dashboard based on role
-            if (user.role === "dc") {
+            if (storedUser.role === "dc") {
                 navigate("/dc");
             } else {
                 navigate("/engineer");
@@ -44,55 +48,88 @@ export default function AdminDashboard() {
     }, [navigate]);
 
     useEffect(() => {
-        loadStats();
-        loadRecentActivity();
-        checkSystemStatus();
-        
-        const interval = setInterval(() => {
+        if (user && user.role === "admin") {
             loadStats();
-        }, 30000); // Refresh every 30 seconds
-        
-        return () => clearInterval(interval);
-    }, []);
+            loadRecentActivity();
+            checkSystemStatus();
+            
+            const interval = setInterval(() => {
+                loadStats();
+            }, 30000); // Refresh every 30 seconds
+            
+            return () => clearInterval(interval);
+        }
+    }, [user]);
 
     async function loadStats() {
         try {
-            const [usersRes, projectsRes, irsRes, revsRes, archiveRes, dcArchiveRes] = await Promise.all([
-                fetch(`${API_URL}/users`),
-                fetch(`${API_URL}/projects`),
-                fetch(`${API_URL}/irs`),
-                fetch(`${API_URL}/revs`),
-                fetch(`${API_URL}/archive/engineer?user=admin`).catch(() => ({ ok: false })),
-                fetch(`${API_URL}/archive/dc`).catch(() => ({ ok: false }))
+            const [usersRes, projectsRes, irsRes, revsRes] = await Promise.all([
+                fetch(`${API_URL}/users`).catch(() => ({ ok: false })),
+                fetch(`${API_URL}/projects`).catch(() => ({ ok: false })),
+                fetch(`${API_URL}/irs`).catch(() => ({ ok: false })),
+                fetch(`${API_URL}/revs`).catch(() => ({ ok: false }))
             ]);
             
-            if (!usersRes.ok || !projectsRes.ok || !irsRes.ok || !revsRes.ok) {
-                throw new Error("Failed to fetch system data");
+            // Initialize data with defaults
+            let usersData = { users: [] };
+            let projectsData = { projects: {} };
+            let irsData = { irs: [] };
+            let revsData = { revs: [] };
+
+            // Parse responses only if ok
+            if (usersRes.ok) {
+                try {
+                    const data = await usersRes.json();
+                    usersData = data || { users: [] };
+                    console.log("Users loaded:", usersData.users?.length);
+                } catch (e) {
+                    console.error("Failed to parse users response:", e);
+                }
+            } else {
+                console.warn("Users endpoint returned:", usersRes.status);
             }
 
-            const usersData = await usersRes.json();
-            const projectsData = await projectsRes.json();
-            const irsData = await irsRes.json();
-            const revsData = await revsRes.json();
+            if (projectsRes.ok) {
+                try {
+                    projectsData = await projectsRes.json();
+                } catch (e) {
+                    console.error("Failed to parse projects response:", e);
+                }
+            }
+
+            if (irsRes.ok) {
+                try {
+                    irsData = await irsRes.json();
+                } catch (e) {
+                    console.error("Failed to parse IRS response:", e);
+                }
+            }
+
+            if (revsRes.ok) {
+                try {
+                    revsData = await revsRes.json();
+                } catch (e) {
+                    console.error("Failed to parse revisions response:", e);
+                }
+            }
 
             const projectsCount = Object.keys(projectsData.projects || {}).length;
             const activeIRs = irsData.irs?.length || 0;
             const pendingRevisions = revsData.revs?.filter(rev => !rev.isDone)?.length || 0;
             const completedIRs = irsData.irs?.filter(ir => ir.isDone)?.length || 0;
             const pendingIRs = activeIRs - completedIRs;
-
-            // Calculate CPR count
             const cprCount = irsData.irs?.filter(ir => ir.requestType === "CPR")?.length || 0;
 
-            // Calculate archive stats
+            // Try to get archive stats
             let archiveTotal = 0;
-            if (archiveRes.ok) {
-                const archiveData = await archiveRes.json();
-                archiveTotal += archiveData.archive?.length || 0;
-            }
-            if (dcArchiveRes.ok) {
-                const dcArchiveData = await dcArchiveRes.json();
-                archiveTotal += dcArchiveData.archive?.length || 0;
+            try {
+                const archiveRes = await fetch(`${API_URL}/archive/dc`).catch(() => ({ ok: false }));
+                if (archiveRes.ok) {
+                    const archiveData = await archiveRes.json();
+                    archiveTotal += archiveData.archive?.length || 0;
+                }
+            } catch (e) {
+                console.log("Archive endpoint not available");
             }
 
             setStats({
@@ -117,23 +154,62 @@ export default function AdminDashboard() {
     async function loadRecentActivity() {
         try {
             const [irsRes, revsRes] = await Promise.all([
-                fetch(`${API_URL}/irs`),
-                fetch(`${API_URL}/revs`)
+                fetch(`${API_URL}/irs`).catch(() => ({ ok: false })),
+                fetch(`${API_URL}/revs`).catch(() => ({ ok: false }))
             ]);
 
-            const irsData = await irsRes.json();
-            const revsData = await revsRes.json();
+            let irsData = { irs: [] };
+            let revsData = { revs: [] };
+
+            if (irsRes.ok) {
+                try {
+                    irsData = await irsRes.json();
+                } catch (e) {
+                    console.error("Failed to parse recent IRS:", e);
+                }
+            }
+
+            if (revsRes.ok) {
+                try {
+                    revsData = await revsRes.json();
+                } catch (e) {
+                    console.error("Failed to parse recent revisions:", e);
+                }
+            }
 
             // Combine and sort by date
             const allItems = [
-                ...(irsData.irs || []).map(item => ({ ...item, type: 'IR', date: item.sentAt })),
-                ...(revsData.revs || []).map(item => ({ ...item, type: 'REV', date: item.sentAt }))
+                ...(irsData.irs || []).map(item => ({ 
+                    ...item, 
+                    type: 'IR', 
+                    date: item.sentAt || item.createdAt || item.updatedAt,
+                    shortId: item.irNo ? item.irNo.split('-').pop() : '',
+                    user: item.user || 'Unknown',
+                    project: item.project || 'Unknown',
+                    department: item.department || 'Unknown'
+                })),
+                ...(revsData.revs || []).map(item => ({ 
+                    ...item, 
+                    type: 'REV', 
+                    date: item.sentAt || item.createdAt || item.updatedAt,
+                    shortId: item.revNo ? item.revNo.split('-').pop() : '',
+                    user: item.user || 'Unknown',
+                    project: item.project || 'Unknown',
+                    department: item.department || 'Unknown'
+                }))
             ];
 
             // Sort by date (newest first) and take top 10
-            const sorted = allItems.sort((a, b) => 
-                new Date(b.date).getTime() - new Date(a.date).getTime()
-            ).slice(0, 10);
+            const sorted = allItems
+                .filter(item => item.date)
+                .sort((a, b) => {
+                    try {
+                        return new Date(b.date).getTime() - new Date(a.date).getTime();
+                    } catch {
+                        return 0;
+                    }
+                })
+                .slice(0, 10);
 
             setRecentActivity(sorted);
         } catch (err) {
@@ -143,22 +219,22 @@ export default function AdminDashboard() {
 
     async function checkSystemStatus() {
         try {
-            // Check database connection
-            const dbCheck = await fetch(`${API_URL}/users`);
+            // Check database connection using health endpoint
+            const dbCheck = await fetch(`${API_URL}/health`).catch(() => ({ ok: false }));
             const dbStatus = dbCheck.ok ? "online" : "offline";
             
             // Check API status
-            const apiCheck = await fetch(`${API_URL}/projects`);
+            const apiCheck = await fetch(`${API_URL}/projects`).catch(() => ({ ok: false }));
             const apiStatus = apiCheck.ok ? "online" : "offline";
             
-            // Calculate uptime (simplified)
-            const startTime = localStorage.getItem('system_start_time');
-            let uptime = "0 days";
-            if (startTime) {
-                const diff = Date.now() - parseInt(startTime);
-                const days = Math.floor(diff / (1000 * 60 * 60 * 24));
-                uptime = `${days} days`;
-            }
+            // Calculate uptime
+            const startTime = localStorage.getItem('system_start_time') || Date.now();
+            localStorage.setItem('system_start_time', startTime);
+            
+            const diff = Date.now() - parseInt(startTime);
+            const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+            const hours = Math.floor((diff % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+            const uptime = days > 0 ? `${days} days` : `${hours} hours`;
 
             setSystemStatus({
                 database: dbStatus,
@@ -186,8 +262,7 @@ export default function AdminDashboard() {
                 navigate('/engineer-records');
                 break;
             case 'system_settings':
-                // Navigate to system settings page when created
-                alert('System settings page coming soon!');
+                navigate('/admin/settings');
                 break;
         }
     };
@@ -268,7 +343,7 @@ export default function AdminDashboard() {
             icon: "👥",
             color: "text-blue-600",
             bgColor: "bg-blue-50",
-            change: "+2 this week"
+            change: "Active users"
         },
         {
             label: "Active Projects",
@@ -292,7 +367,7 @@ export default function AdminDashboard() {
             icon: "✅",
             color: "text-green-600",
             bgColor: "bg-green-50",
-            change: `${Math.round((stats.completedIRs / (stats.activeIRs || 1)) * 100)}% completion`
+            change: `${stats.activeIRs > 0 ? Math.round((stats.completedIRs / stats.activeIRs) * 100) : 0}% completion`
         },
         {
             label: "CPR Requests",
@@ -352,25 +427,29 @@ export default function AdminDashboard() {
             label: "Database",
             status: systemStatus.database,
             color: systemStatus.database === "online" ? "text-green-600" : "text-red-600",
-            icon: systemStatus.database === "online" ? "🟢" : "🔴"
+            icon: systemStatus.database === "online" ? "🟢" : "🔴",
+            description: systemStatus.database === "online" ? "Connected and operational" : "Connection issues"
         },
         {
             label: "API Server",
             status: systemStatus.api,
             color: systemStatus.api === "online" ? "text-green-600" : "text-red-600",
-            icon: systemStatus.api === "online" ? "🟢" : "🔴"
+            icon: systemStatus.api === "online" ? "🟢" : "🔴",
+            description: systemStatus.api === "online" ? "All endpoints available" : "Some services unavailable"
         },
         {
             label: "System Uptime",
             status: systemStatus.uptime,
             color: "text-blue-600",
-            icon: "⏱️"
+            icon: "⏱️",
+            description: "Continuous operation"
         }
     ];
 
     if (loading) {
         return (
             <>
+                <Navbar />
                 <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
                     <div className="text-center">
                         <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
@@ -383,7 +462,9 @@ export default function AdminDashboard() {
     }
 
     return (
-        <>            
+        <>
+            <Navbar />
+            
             <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100">
                 {/* Header */}
                 <div className="bg-gradient-to-r from-slate-900 to-slate-800 text-white shadow-xl">
@@ -398,7 +479,7 @@ export default function AdminDashboard() {
                                 </p>
                                 <div className="flex items-center gap-4 mt-3">
                                     <div className="flex items-center gap-2">
-                                        <div className="w-2 h-2 rounded-full bg-green-500"></div>
+                                        <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
                                         <span className="text-sm text-slate-300">Full Administrative Access</span>
                                     </div>
                                     <div className="text-sm bg-white/10 px-3 py-1 rounded-full">
@@ -443,6 +524,21 @@ export default function AdminDashboard() {
                         </div>
                     )}
 
+                    {/* Welcome Message */}
+                    {user && (
+                        <div className="mb-6 bg-gradient-to-r from-blue-50 to-indigo-50 rounded-xl p-4 border border-blue-200">
+                            <div className="flex items-center gap-3">
+                                <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold">
+                                    {user.username?.charAt(0).toUpperCase()}
+                                </div>
+                                <div>
+                                    <h3 className="font-bold text-blue-800">Welcome, {user.fullname || user.username}!</h3>
+                                    <p className="text-blue-600 text-sm">You have full administrative access to all system modules.</p>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
                     {/* System Health */}
                     <div className="mb-10">
                         <h2 className="text-xl font-bold text-gray-800 mb-4 flex items-center gap-2">
@@ -462,9 +558,7 @@ export default function AdminDashboard() {
                                     </div>
                                     <p className="text-gray-700 font-medium">{item.label}</p>
                                     <p className="text-gray-500 text-sm mt-1">
-                                        {item.label === "System Uptime" ? "Continuous operation" : 
-                                         item.status === "online" ? "Connected and operational" : 
-                                         "Connection issues"}
+                                        {item.description}
                                     </p>
                                 </div>
                             ))}
@@ -627,7 +721,7 @@ export default function AdminDashboard() {
                                             </div>
                                             <div className="flex-1">
                                                 <div className="font-medium text-gray-800">
-                                                    {item.irNo || item.revNo}
+                                                    {item.irNo || item.revNo || `#${item.shortId}`}
                                                 </div>
                                                 <div className="text-sm text-gray-500 flex items-center gap-2">
                                                     <span>{item.project}</span>
@@ -638,7 +732,7 @@ export default function AdminDashboard() {
                                                 </div>
                                             </div>
                                             <div className="text-xs text-gray-500">
-                                                {new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                                                {item.date ? new Date(item.date).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'N/A'}
                                             </div>
                                         </div>
                                     ))

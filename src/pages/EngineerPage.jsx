@@ -51,7 +51,7 @@ export default function EngineerPage() {
     const [revText, setRevText] = useState("");
     const [revNote, setRevNote] = useState("");
     const [revSaving, setRevSaving] = useState(false);
-
+  
     // 1. تحميل المشاريع والإعدادات
     useEffect(() => {
         fetch(`${API_URL}/projects`)
@@ -238,7 +238,7 @@ export default function EngineerPage() {
     const reloadData = () => {
         // يمكنك إضافة أي إعادة تحميل للبيانات هنا إذا لزم الأمر
         console.log("🔄 Reloading data...");
-        
+
         // إعادة تحميل المشاريع
         fetch(`${API_URL}/projects`)
             .then(r => r.json())
@@ -249,7 +249,7 @@ export default function EngineerPage() {
             .catch((err) => {
                 console.error("Failed to reload projects:", err);
             });
-        
+
         // إذا كان هناك مشروع محدد، إعادة تحميل مواقعه
         if (selectedProject) {
             loadDescriptions(selectedProject);
@@ -397,11 +397,9 @@ export default function EngineerPage() {
             return;
         }
 
-        // تحديد نوع الـ Revision بناءً على صلاحية المستخدم
         let revisionType = "IR_REVISION";
         let parentRequestType = "IR";
 
-        // إذا كان المستخدم في صفحة CPR وكان مدنياً
         if (requestType === "CPR") {
             if (!isCivilEngineer) {
                 alert("CPR revisions are only available for Civil/Structure engineers");
@@ -418,7 +416,7 @@ export default function EngineerPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                     project: revProject,
-                    revText: revText.trim(),  // ⭐⭐ **الرقم الذي يدخله المهندس** ⭐⭐
+                    revText: revText.trim(),
                     revNote: revNote,
                     user: user.username,
                     department: department,
@@ -432,33 +430,15 @@ export default function EngineerPage() {
             if (res.ok) {
                 const revTypeDisplay = revisionType === "CPR_REVISION" ? "CPR Revision" : "IR Revision";
                 const displayNum = data.rev?.displayNumber || data.rev?.userRevNumber || "REV";
-                
-                alert(`✅ ${revTypeDisplay} ${displayNum} Sent to DC!`);
-                console.log("✅ Revision created:", data.rev);
 
-                console.log("📤 Revision Data Sent:", {
-                    revNo: data.rev?.revNo,
-                    displayNumber: data.rev?.displayNumber,
-                    userRevNumber: data.rev?.userRevNumber,
-                    project: revProject,
-                    revText: revText.trim(),
-                    revisionType: revisionType,
-                    user: user.username,
-                    department: department,
-                    isCPRRevision: data.rev?.isCPRRevision,
-                    isIRRevision: data.rev?.isIRRevision
-                });
+                alert(`✅ ${revTypeDisplay} ${displayNum} Sent to DC!`);
 
                 setShowRevModal(false);
                 setRevProject("");
                 setRevText("");
                 setRevNote("");
-                
-                // ❌ **تم إزالة استدعاء loadAllData الغير معرف** ❌
-                // ❌ setTimeout(() => { loadAllData(); }, 1000); // ❌ هذا الخطأ
-                
-                // ✅ بدلاً من ذلك، يمكننا إعادة تحميل البيانات إذا لزم الأمر
-                // reloadData(); // ❓ إذا كنت بحاجة لإعادة تحميل البيانات
+
+                // لا يوجد استدعاء لدالة غير معرفة
             } else {
                 throw new Error(data.error || `Failed to create revision`);
             }
@@ -469,7 +449,6 @@ export default function EngineerPage() {
             setRevSaving(false);
         }
     }
-
     // دالة إضافة Tag مع Enter
     const handleKeyPress = (e, type) => {
         if (e.key === 'Enter') {
@@ -784,21 +763,21 @@ export default function EngineerPage() {
                             />
                             <div>
                                 <label className="block font-bold text-gray-700 mb-1 text-sm">
-                                    Rev No
+                                    IR No
                                 </label>
                                 <input
                                     type="text"
                                     value={revText}
                                     onChange={(e) => setRevText(e.target.value)}
                                     className="w-full border-2 border-gray-200 rounded-lg p-3 focus:border-amber-500 outline-none"
-                                    placeholder="REv Nomber"
+                                    placeholder="أدخل رقم المراجعة (مثل: R1, R2, 001...)"
                                     required
                                 />
-                             
+
                             </div>
                             <div>
                                 <label className="block font-bold text-gray-700 mb-1 text-sm">
-                                    Additional Notes (Optional)
+                                    Additional Notes
                                 </label>
                                 <textarea
                                     value={revNote}

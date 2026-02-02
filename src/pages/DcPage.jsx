@@ -1195,7 +1195,7 @@ export default function DcPage() {
                                             "bg-gray-100 text-gray-800"}`}>
                                             {dept}
                                         </span>
-                                        {dept === "ST" ? "Civil/Structure" : dept} Department
+                                        {dept === "ST" ? "Civil/Structure" : dept} DepartmentS
                                         <span className="text-sm font-normal text-gray-500">
                                             ({list.length} items)
                                         </span>

@@ -24,6 +24,8 @@ export default function EngineerPage() {
     const [selectedFloor, setSelectedFloor] = useState(""); // ✅ حقل Floor جديد
     const [generalDesc, setGeneralDesc] = useState("");
     const [finalDescription, setFinalDescription] = useState("");
+    const [isEditingFinalDesc, setIsEditingFinalDesc] = useState(false); // ✅ حالة التعديل
+    const [originalFinalDesc, setOriginalFinalDesc] = useState(""); // ✅ حفظ النسخة الأصلية
 
     // حقول CPR الإضافية
     const [pouringElement, setPouringElement] = useState("");
@@ -229,7 +231,12 @@ export default function EngineerPage() {
             finalDesc = `${description} For${floorStr} AT${locStr}${typeStr}`.trim();
         }
 
-        setFinalDescription(finalDesc);
+        // تحديث الوصف النهائي فقط إذا لم يكن المستخدم في وضع التعديل
+        if (!isEditingFinalDesc) {
+            setFinalDescription(finalDesc);
+            setOriginalFinalDesc(finalDesc); // حفظ النسخة الأصلية
+        }
+        
         console.log("📝 Final description updated:", finalDesc);
 
     }, [generalDesc, selectedLocation, selectedFloor, typesMap, requestType]);
@@ -254,6 +261,24 @@ export default function EngineerPage() {
         if (selectedProject) {
             loadDescriptions(selectedProject);
         }
+    };
+
+    // ✅ دالة لتفعيل وضع التعديل
+    const handleEditFinalDesc = () => {
+        setIsEditingFinalDesc(true);
+        setOriginalFinalDesc(finalDescription); // حفظ النسخة الحالية كأصلية
+    };
+
+    // ✅ دالة لحفظ التعديلات
+    const handleSaveFinalDesc = () => {
+        setIsEditingFinalDesc(false);
+        // الوصف المحدث سيتم حفظه في finalDescription
+    };
+
+    // ✅ دالة لإلغاء التعديلات
+    const handleCancelEditFinalDesc = () => {
+        setIsEditingFinalDesc(false);
+        setFinalDescription(originalFinalDesc); // استعادة النسخة الأصلية
     };
 
     // دالة الإرسال (Submit)
@@ -286,6 +311,12 @@ export default function EngineerPage() {
             return;
         }
 
+        // ✅ تحقق من الوصف النهائي
+        if (!finalDescription.trim()) {
+            alert("Please enter a final description");
+            return;
+        }
+
         setSaving(true);
 
         // ✅ إنشاء payload مختلف لـ CPR و IR
@@ -297,7 +328,7 @@ export default function EngineerPage() {
                 project: selectedProject,
                 location: selectedLocation,
                 // ❌ NO FLOOR FOR CPR
-                desc: finalDescription,
+                desc: finalDescription, // ✅ استخدام الوصف النهائي بعد التعديلات
                 user: user.username,
                 department: department,
                 requestType: "CPR",
@@ -305,7 +336,8 @@ export default function EngineerPage() {
                 sdNote: sdInput,
                 tags: { engineer: irTags, sd: sdTags },
                 // ✅ إضافة حقول CPR الإضافية
-                pouringElement: generalDesc || ""
+                pouringElement: generalDesc || "",
+                isEdited: isEditingFinalDesc // ✅ إضافة علامة على أن الوصف تم تعديله
             };
         } else {
             // ✅ لـ IR العادي: مع floor
@@ -313,13 +345,14 @@ export default function EngineerPage() {
                 project: selectedProject,
                 location: selectedLocation,
                 floor: selectedFloor || "", // ✅ نحتاج الـ floor لـ IR
-                desc: finalDescription,
+                desc: finalDescription, // ✅ استخدام الوصف النهائي بعد التعديلات
                 user: user.username,
                 department: department,
                 requestType: "IR",
                 engineerNote: irInput,
                 sdNote: sdInput,
-                tags: { engineer: irTags, sd: sdTags }
+                tags: { engineer: irTags, sd: sdTags },
+                isEdited: isEditingFinalDesc // ✅ إضافة علامة على أن الوصف تم تعديله
             };
         }
 
@@ -335,7 +368,7 @@ export default function EngineerPage() {
             const data = await res.json();
 
             if (res.ok) {
-                alert(`${requestType === "CPR" ? "ORC (CPR)" : requestType} Created Successfully!\nNumber: ${data.ir?.irNo || "Generated"}`);
+                alert(`${requestType === "CPR" ? "ORC (CPR)" : requestType} Created Successfully!\nNumber: ${data.ir?.irNo || "Generated"}\nDescription: ${finalDescription.substring(0, 50)}...`);
 
                 // ريست للفورم
                 resetForm();
@@ -368,6 +401,8 @@ export default function EngineerPage() {
         setSelectedFloor(""); // ✅ إعادة تعيين floor
         setFinalDescription("");
         setPouringElement(""); // ✅ إعادة تعيين عنصر الصب
+        setIsEditingFinalDesc(false); // ✅ إعادة تعيين حالة التعديل
+        setOriginalFinalDesc(""); // ✅ إعادة تعيين النسخة الأصلية
     };
 
     // تبديل بين IR و CPR
@@ -449,6 +484,7 @@ export default function EngineerPage() {
             setRevSaving(false);
         }
     }
+    
     // دالة إضافة Tag مع Enter
     const handleKeyPress = (e, type) => {
         if (e.key === 'Enter') {
@@ -694,33 +730,80 @@ export default function EngineerPage() {
                         </div>
                     </div>
 
-                    {/* Final Description */}
+                    {/* Final Description - مع إمكانية التعديل */}
                     <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                         <div className="flex justify-between items-center mb-2">
                             <label className="block text-lg font-bold text-gray-700">
                                 Final Generated Description
                             </label>
-                            <span className={`px-2 py-1 rounded text-xs font-bold ${requestType === "CPR" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}`}>
-                                {requestType === "CPR" ? "ORC" : requestType}
-                            </span>
+                            <div className="flex items-center gap-2">
+                                <span className={`px-2 py-1 rounded text-xs font-bold ${requestType === "CPR" ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}`}>
+                                    {requestType === "CPR" ? "ORC" : requestType}
+                                </span>
+                                
+                                {!isEditingFinalDesc ? (
+                                    <button
+                                        onClick={handleEditFinalDesc}
+                                        className="px-3 py-1 bg-amber-500 hover:bg-amber-600 text-white text-xs font-medium rounded transition"
+                                    >
+                                        ✏️ Edit
+                                    </button>
+                                ) : (
+                                    <div className="flex gap-1">
+                                        <button
+                                            onClick={handleSaveFinalDesc}
+                                            className="px-2 py-1 bg-green-500 hover:bg-green-600 text-white text-xs font-medium rounded transition"
+                                        >
+                                            💾 Save
+                                        </button>
+                                        <button
+                                            onClick={handleCancelEditFinalDesc}
+                                            className="px-2 py-1 bg-gray-500 hover:bg-gray-600 text-white text-xs font-medium rounded transition"
+                                        >
+                                            ❌ Cancel
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
                         </div>
-                        <textarea
-                            className="w-full p-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg text-gray-700 font-medium"
-                            rows={3}
-                            value={finalDescription}
-                            onChange={(e) => setFinalDescription(e.target.value)}
-                            placeholder="Description will be generated automatically..."
-                        />
-                        <p className="text-xs text-gray-400 mt-2 italic">
-                            * You can manually edit the final text if needed
-                        </p>
+                        
+                        {isEditingFinalDesc ? (
+                            <div className="space-y-2">
+                                <textarea
+                                    className="w-full p-4 border-2 border-blue-300 rounded-lg text-gray-700 font-medium focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+                                    rows={4}
+                                    value={finalDescription}
+                                    onChange={(e) => setFinalDescription(e.target.value)}
+                                    placeholder="Edit the final description..."
+                                />
+                                <div className="text-xs text-gray-500 flex justify-between">
+                                    <span>🔧 You are in edit mode. Changes will be saved when you click "Save".</span>
+                                    <span>{finalDescription.length} characters</span>
+                                </div>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                <textarea
+                                    className="w-full p-4 bg-gray-50 border-2 border-dashed border-gray-300 rounded-lg text-gray-700 font-medium"
+                                    rows={3}
+                                    value={finalDescription}
+                                    onChange={(e) => setFinalDescription(e.target.value)}
+                                    placeholder="Description will be generated automatically..."
+                                    readOnly={!isEditingFinalDesc}
+                                />
+                                <div className="text-xs text-gray-400 italic flex justify-between">
+                                    <span>* Click "Edit" to modify this description</span>
+                                    <span>{finalDescription.length} characters</span>
+                                </div>
+                            </div>
+                        )}
                     </div>
 
                     {/* Submit Button */}
                     <button
                         onClick={handleSave}
-                        disabled={saving || !selectedProject || !selectedLocation || !generalDesc || (requestType === "IR" && !selectedFloor)}
-                        className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg transition-all ${saving || !selectedProject || !selectedLocation || !generalDesc || (requestType === "IR" && !selectedFloor)
+                        disabled={saving || !selectedProject || !selectedLocation || !generalDesc || (requestType === "IR" && !selectedFloor) || !finalDescription.trim()}
+                        className={`w-full py-4 rounded-xl text-white font-bold text-lg shadow-lg transition-all ${saving || !selectedProject || !selectedLocation || !generalDesc || (requestType === "IR" && !selectedFloor) || !finalDescription.trim()
                             ? "bg-gray-400 cursor-not-allowed"
                             : requestType === "CPR"
                                 ? "bg-green-600 hover:bg-green-700 hover:-translate-y-1"
@@ -733,9 +816,9 @@ export default function EngineerPage() {
                                 Processing...
                             </span>
                         ) : requestType === "CPR" ? (
-                            "Submit ORC (CPR) Request"
+                            `Submit ORC (CPR) Request ${isEditingFinalDesc ? '(Edited Description)' : ''}`
                         ) : (
-                            "Submit Inspection Request"
+                            `Submit Inspection Request ${isEditingFinalDesc ? '(Edited Description)' : ''}`
                         )}
                     </button>
                 </div>

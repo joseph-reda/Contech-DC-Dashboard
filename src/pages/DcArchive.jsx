@@ -1,3 +1,4 @@
+// DcArchive.jsx - النسخة النهائية المحسنة
 import { useEffect, useState } from "react";
 import { API_URL } from "../config";
 import { useNavigate } from "react-router-dom";
@@ -11,6 +12,7 @@ export default function DcArchive() {
     const [deleting, setDeleting] = useState({});
     const [searchTerm, setSearchTerm] = useState("");
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+    const [toast, setToast] = useState("");
     
     // فلاتر الـ Sidebar
     const [sidebarFilters, setSidebarFilters] = useState({
@@ -61,7 +63,6 @@ export default function DcArchive() {
                     revisionType: item.revisionType || "IR_REVISION",
                     parentRequestType: item.parentRequestType || "IR",
                     downloadedBy: item.downloadedBy || "",
-                    // ⭐⭐ حقول جديدة للمراجعات ⭐⭐
                     userRevNumber: item.userRevNumber || item.revText,
                     displayNumber: item.displayNumber || 
                         (item.userRevNumber ? 
@@ -74,7 +75,7 @@ export default function DcArchive() {
             }
         } catch (err) {
             console.error("Error loading archive:", err);
-            showToast("❌ Failed to load archive");
+            showToastMessage("❌ Failed to load archive");
         } finally {
             setLoading(false);
         }
@@ -126,8 +127,7 @@ export default function DcArchive() {
         }
     };
 
-    const [toast, setToast] = useState("");
-    const showToast = (msg) => {
+    const showToastMessage = (msg) => {
         setToast(msg);
         setTimeout(() => setToast(""), 3000);
     };
@@ -315,26 +315,29 @@ export default function DcArchive() {
             const json = await res.json();
             if (!res.ok) throw new Error(json.error || "Restore failed");
 
+            // Update state locally
             setItems(prev => prev.filter(x => x.irNo !== item.irNo));
-            showToast("✅ Item restored successfully!");
+            showToastMessage("✅ Item restored successfully!");
         } catch (err) {
             console.error("Restore error:", err);
-            showToast("❌ Restore failed: " + err.message);
+            showToastMessage("❌ Restore failed: " + err.message);
         } finally {
             setRestoring(prev => ({ ...prev, [item.irNo]: false }));
         }
     }
 
     async function handleDelete(item) {
-        if (!window.confirm(`Permanently delete ${formatIrNumber(item.irNo)} from archive?\n\n⚠️ This action cannot be undone!`)) return;
-
         setDeleting(prev => ({ ...prev, [item.irNo]: true }));
 
         try {
-            const endpoint = item.isRevision ? `${API_URL}/revs` : `${API_URL}/irs`;
-            const url = `${endpoint}?irNo=${encodeURIComponent(item.irNo)}`;
-            
-            const res = await fetch(url, { 
+            // Determine endpoint based on item type
+            const isRevision = item.isRevision || false;
+            const endpoint = isRevision ? `${API_URL}/revs` : `${API_URL}/irs`;
+            const itemIdentifier = isRevision ? 'revNo' : 'irNo';
+            const itemId = item[itemIdentifier] || item.irNo;
+
+            // Delete from database
+            const res = await fetch(`${endpoint}?${itemIdentifier}=${encodeURIComponent(itemId)}`, { 
                 method: "DELETE",
                 headers: { "Content-Type": "application/json" }
             });
@@ -343,11 +346,13 @@ export default function DcArchive() {
             
             if (!res.ok) throw new Error(data.error || "Delete failed");
 
+            // Update state locally
             setItems(prev => prev.filter(x => x.irNo !== item.irNo));
-            showToast("🗑️ Item deleted permanently!");
+            showToastMessage("🗑️ Item deleted permanently!");
+            
         } catch (err) {
             console.error("Delete error:", err);
-            showToast("❌ Delete failed: " + err.message);
+            showToastMessage(`❌ Delete failed: ${err.message}`);
         } finally {
             setDeleting(prev => ({ ...prev, [item.irNo]: false }));
             setShowDeleteConfirm(null);
@@ -404,37 +409,84 @@ export default function DcArchive() {
         )
     );
 
-    const DeleteConfirmationModal = () => (
-        showDeleteConfirm && (
+    const DeleteConfirmationModal = () => {
+        if (!showDeleteConfirm) return null;
+        
+        const { item } = showDeleteConfirm;
+        const displayNumber = item.isRevision ? 
+            getRevDisplayNumber(item) : 
+            formatIrNumber(item.irNo);
+        
+        return (
             <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
                 <div className="bg-white rounded-2xl shadow-2xl max-w-md w-full p-6 animate-in zoom-in">
-                    <div className="text-red-500 text-4xl mb-4 text-center">⚠️</div>
-                    <h3 className="text-xl font-bold text-gray-800 mb-2 text-center">Permanent Delete</h3>
-                    <p className="text-gray-600 mb-6 text-center">
-                        Are you sure you want to permanently delete<br/>
-                        <span className="font-bold">{formatIrNumber(showDeleteConfirm.irNo)}</span>?
-                    </p>
-                    <p className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mb-6 text-center">
-                        ⚠️ This action cannot be undone!
-                    </p>
+                    <div className="text-center mb-4">
+                        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-red-100 flex items-center justify-center">
+                            <span className="text-3xl text-red-500">⚠️</span>
+                        </div>
+                        <h3 className="text-xl font-bold text-gray-800 mb-2">Permanent Delete</h3>
+                        <p className="text-gray-600 mb-4">
+                            Are you sure you want to permanently delete this item?
+                        </p>
+                    </div>
+                    
+                    <div className="bg-red-50 border border-red-200 rounded-lg p-4 mb-6">
+                        <div className="grid grid-cols-2 gap-2 text-sm">
+                            <div className="text-gray-600">Item:</div>
+                            <div className="font-semibold">{displayNumber}</div>
+                            
+                            <div className="text-gray-600">Type:</div>
+                            <div className="font-semibold">
+                                {item.isRevision ? 
+                                    getRevTypeText(item) : 
+                                    (item.requestType === 'CPR' ? 'CPR' : 'IR')
+                                }
+                            </div>
+                            
+                            <div className="text-gray-600">Project:</div>
+                            <div className="font-semibold">{item.project || 'Unknown'}</div>
+                            
+                            <div className="text-gray-600">Description:</div>
+                            <div className="font-semibold truncate" title={item.desc}>
+                                {item.desc?.substring(0, 30) || 'No description'}...
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div className="text-sm text-red-600 bg-red-50 p-3 rounded-lg mb-6 text-center">
+                        ⚠️ Warning: This action cannot be undone! The item will be permanently removed from the system.
+                    </div>
+                    
                     <div className="flex gap-3">
                         <button
                             onClick={() => setShowDeleteConfirm(null)}
-                            className="flex-1 py-2 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium"
+                            className="flex-1 py-3 bg-gray-200 hover:bg-gray-300 text-gray-800 rounded-lg font-medium transition"
                         >
                             Cancel
                         </button>
                         <button
-                            onClick={() => handleDelete(showDeleteConfirm)}
-                            className="flex-1 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg font-medium"
+                            onClick={() => handleDelete(item)}
+                            disabled={deleting[item.irNo]}
+                            className={`flex-1 py-3 rounded-lg font-medium transition ${
+                                deleting[item.irNo] 
+                                    ? 'bg-red-400 cursor-not-allowed' 
+                                    : 'bg-red-600 hover:bg-red-700 text-white'
+                            }`}
                         >
-                            Delete Permanently
+                            {deleting[item.irNo] ? (
+                                <span className="flex items-center justify-center gap-2">
+                                    <span className="inline-block h-4 w-4 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
+                                    Deleting...
+                                </span>
+                            ) : (
+                                'Delete Permanently'
+                            )}
                         </button>
                     </div>
                 </div>
             </div>
-        )
-    );
+        );
+    };
 
     const ArchiveStats = () => (
         <div className="mt-6 bg-white rounded-xl shadow-lg border border-gray-200 p-4">
@@ -740,10 +792,12 @@ export default function DcArchive() {
         </div>
     );
 
-    const ArchiveTableRow = ({ item, isDeleting, isRestoring }) => {
+    const ArchiveTableRow = ({ item }) => {
         const deptAbbr = getDepartmentAbbr(item.department);
         const revTypeText = getRevTypeText(item);
         const displayNumber = item.isRevision ? getRevDisplayNumber(item) : formatIrNumber(item.irNo);
+        const isDeletingNow = deleting[item.irNo];
+        const isRestoringNow = restoring[item.irNo];
 
         return (
             <tr className="border-b hover:bg-gray-50 transition-colors">
@@ -845,17 +899,17 @@ export default function DcArchive() {
                 
                 {/* Actions Column */}
                 <td className="p-4">
-                    <div className="flex gap-2">
+                    <div className="flex flex-col sm:flex-row gap-2">
                         <button
                             onClick={() => handleRestore(item)}
-                            disabled={isRestoring || isDeleting}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all min-w-[100px] ${
-                                isRestoring 
+                            disabled={isRestoringNow || isDeletingNow}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all min-w-[100px] flex-1 ${
+                                isRestoringNow 
                                     ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
                                     : "bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm"
                             }`}
                         >
-                            {isRestoring ? (
+                            {isRestoringNow ? (
                                 <span className="flex items-center justify-center gap-2">
                                     <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
                                     Restoring...
@@ -868,15 +922,15 @@ export default function DcArchive() {
                         </button>
                         
                         <button
-                            onClick={() => setShowDeleteConfirm(item)}
-                            disabled={isDeleting || isRestoring}
-                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all min-w-[100px] ${
-                                isDeleting 
+                            onClick={() => setShowDeleteConfirm({ item })}
+                            disabled={isDeletingNow || isRestoringNow}
+                            className={`px-4 py-2 rounded-lg text-sm font-medium transition-all min-w-[100px] flex-1 ${
+                                isDeletingNow 
                                     ? "bg-gray-300 text-gray-500 cursor-not-allowed" 
                                     : "bg-red-600 hover:bg-red-700 text-white shadow-sm"
                             }`}
                         >
-                            {isDeleting ? (
+                            {isDeletingNow ? (
                                 <span className="flex items-center justify-center gap-2">
                                     <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent"></span>
                                     Deleting...
@@ -937,19 +991,9 @@ export default function DcArchive() {
                         </tr>
                     </thead>
                     <tbody>
-                        {items.map((item) => {
-                            const isDeleting = deleting[item.irNo];
-                            const isRestoring = restoring[item.irNo];
-                            
-                            return (
-                                <ArchiveTableRow 
-                                    key={item.irNo} 
-                                    item={item} 
-                                    isDeleting={isDeleting} 
-                                    isRestoring={isRestoring} 
-                                />
-                            );
-                        })}
+                        {items.map((item) => (
+                            <ArchiveTableRow key={item.irNo} item={item} />
+                        ))}
                     </tbody>
                 </table>
             </div>

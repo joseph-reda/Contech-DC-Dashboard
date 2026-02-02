@@ -111,9 +111,9 @@ export default function DcPage() {
                 isDone: rev.isDone || false,
                 // ⭐⭐ حقول جديدة للمراجعات ⭐⭐
                 userRevNumber: rev.userRevNumber || rev.revText,
-                displayNumber: rev.displayNumber || 
-                    (rev.userRevNumber ? 
-                        `REV-${rev.revisionType === "CPR_REVISION" ? "CPR-" : "IR-"}${rev.userRevNumber}` : 
+                displayNumber: rev.displayNumber ||
+                    (rev.userRevNumber ?
+                        `REV-${rev.revisionType === "CPR_REVISION" ? "CPR-" : "IR-"}${rev.userRevNumber}` :
                         rev.revNo),
                 isCPRRevision: rev.revisionType === "CPR_REVISION" || rev.isCPRRevision,
                 isIRRevision: rev.revisionType === "IR_REVISION" || rev.isIRRevision
@@ -144,7 +144,7 @@ export default function DcPage() {
     useEffect(() => {
         loadAllData();
 
-        // إعادة تحميل كل 30 ثانية
+        // إعادة تحميل كل 30 ثانية فقط (إزالة إعادة التحميل الفوري)
         const interval = setInterval(() => {
             if (!loading) {
                 loadAllData();
@@ -383,10 +383,18 @@ export default function DcPage() {
             const json = await parseJsonSafe(res);
             if (!res.ok) throw new Error(json.error || "Archive failed");
 
+            // تحديث الـ state محلياً دون إعادة تحميل كامل
             setIRs((prev) => prev.filter((x) => x.irNo !== irNo && x.revNo !== irNo));
+            
+            // تحديث custom numbers
+            setCustomNumbers(prev => {
+                const newMap = { ...prev };
+                delete newMap[irNo];
+                return newMap;
+            });
+            
             showToast(`✅ ${itemName} archived successfully!`);
 
-            setTimeout(() => loadAllData(), 1000);
         } catch (err) {
             console.error("Archive failed:", err);
             showToast(`❌ Archive failed: ${err.message}`);
@@ -411,6 +419,7 @@ export default function DcPage() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to mark revision as done");
 
+            // تحديث الـ state محلياً
             setIRs((prev) =>
                 prev.map((x) =>
                     (x.irNo === irNo || x.revNo === irNo) ? {
@@ -422,7 +431,6 @@ export default function DcPage() {
             );
 
             showToast("✅ Revision marked as done!");
-            setTimeout(() => loadAllData(), 1000);
         } catch (err) {
             console.error("markRevDone error:", err);
             showToast(`❌ Error: ${err.message}`);
@@ -479,6 +487,7 @@ export default function DcPage() {
                 throw new Error(data.error || "Failed to mark item as done");
             }
 
+            // تحديث الـ state محلياً
             setIRs(prev =>
                 prev.map(x =>
                     x.irNo === item.irNo
@@ -501,6 +510,9 @@ export default function DcPage() {
                     return newMap;
                 });
             }
+
+            // تحديث downloadedIRs
+            setDownloadedIRs(prev => new Set([...prev, item.irNo]));
 
         } catch (err) {
             console.error("Mark as done error:", err);
@@ -584,7 +596,6 @@ export default function DcPage() {
             URL.revokeObjectURL(url);
 
             await markItemAsDone(ir, finalIR);
-            setDownloadedIRs(prev => new Set([...prev, ir.irNo]));
             showToast(`✅ Word file with updated number ${finalIR} downloaded and marked as done!`);
 
         } catch (err) {
@@ -605,6 +616,7 @@ export default function DcPage() {
             return;
         }
 
+        // استخراج الرقم التسلسلي من الرقم الجديد
         let numericSerial;
         if (newValue.includes("-")) {
             const parts = newValue.split("-");
@@ -624,11 +636,12 @@ export default function DcPage() {
         try {
             const user = JSON.parse(localStorage.getItem("user") || "null");
 
+            // تحديث الرقم في قاعدة البيانات - استخدام المسار الصحيح
             const res = await fetch(`${API_URL}/irs/update-ir-number`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    irNo: ir.irNo,
+                    irNo: ir.irNo, // الرقم القديم
                     newSerial: numericSerial,
                     role: user?.role || "dc",
                     project: ir.project,
@@ -640,34 +653,42 @@ export default function DcPage() {
             const json = await parseJsonSafe(res);
             if (!res.ok) throw new Error(json.error || "Failed to update IR number");
 
-            const newIrNo = json.ir?.irNo || ir.irNo;
+            // تحديث الرقم في الـ state محلياً
+            const cleanProject = ir.project.replace(" ", "-").upperCase?.() || ir.project;
+            const deptCode = normalizeDept(ir.department);
+            
+            let newIrNo;
+            if (ir.requestType === "CPR") {
+                newIrNo = `BADYA-CON-${cleanProject}-CPR-${numericSerial.toString().padStart(3, '0')}`;
+            } else {
+                newIrNo = `BADYA-CON-${cleanProject}-IR-${deptCode}-${numericSerial.toString().padStart(3, '0')}`;
+            }
 
-            setIRs((prev) =>
-                prev.map((x) =>
-                    x.irNo === ir.irNo
-                        ? {
-                            ...x,
-                            irNo: newIrNo,
-                            downloadedBy: user?.username || "dc",
-                            updatedAt: new Date().toISOString()
-                        }
-                        : x
+            // تحديث IRs في الـ state
+            setIRs(prev => 
+                prev.map(item => 
+                    item.irNo === ir.irNo 
+                        ? { ...item, irNo: newIrNo }
+                        : item
                 )
             );
 
-            setCustomNumbers((prev) => {
-                const map = { ...prev };
-                delete map[ir.irNo];
-                map[newIrNo] = newIrNo;
-                return map;
+            // تحديث custom numbers
+            setCustomNumbers(prev => {
+                const newMap = { ...prev };
+                delete newMap[ir.irNo];
+                newMap[newIrNo] = newIrNo;
+                return newMap;
             });
 
-            showToast(`✅ IR number updated from ${formatIrNumber(ir.irNo)} to ${formatIrNumber(newIrNo)}`);
-            setTimeout(() => loadAllData(), 500);
+            showToast(`✅ IR number updated to ${newIrNo}`);
+            
+            return json;
 
         } catch (err) {
             console.error("Update failed:", err);
             showToast(`❌ Update failed: ${err.message}`);
+            throw err;
         } finally {
             setSavingSerials((s) => {
                 const map = { ...s };
@@ -709,6 +730,13 @@ export default function DcPage() {
             department: "all"
         });
         setSearchTerm("");
+    };
+
+    // تحديث الواجهة
+    const updateIRsLocally = (irNo, updates) => {
+        setIRs(prev => prev.map(item => 
+            item.irNo === irNo ? { ...item, ...updates } : item
+        ));
     };
 
     // 🎨 Render Components
@@ -959,8 +987,8 @@ export default function DcPage() {
         return (
             <tr className={`border-b transition-colors
                 ${isDownloaded ? "bg-emerald-50 hover:bg-emerald-100" :
-                isCPR ? "bg-green-50 hover:bg-green-100" :
-                "hover:bg-blue-50"}`}
+                    isCPR ? "bg-green-50 hover:bg-green-100" :
+                        "hover:bg-blue-50"}`}
             >
                 <td className="p-3">
                     <div className="space-y-2">
@@ -1008,7 +1036,7 @@ export default function DcPage() {
                 <td className="p-3">
                     <span className={`px-3 py-1 rounded-full text-xs font-medium
                         ${isCPR ? "bg-green-100 text-green-800 border border-green-300" :
-                        "bg-blue-100 text-blue-800 border border-blue-300"}`}>
+                            "bg-blue-100 text-blue-800 border border-blue-300"}`}>
                         {isCPR ? "CPR" : "IR"}
                     </span>
                     <div className="text-xs text-gray-500 mt-1">
@@ -1097,8 +1125,8 @@ export default function DcPage() {
                                 onClick={() => handleDownloadWord(ir)}
                                 className={`px-3 py-2 text-white rounded text-sm flex items-center gap-2 shadow-sm min-w-[80px]
                                     ${isDownloaded ?
-                                    "bg-emerald-600 hover:bg-emerald-800" :
-                                    "bg-indigo-600 hover:bg-indigo-800"}`}
+                                        "bg-emerald-600 hover:bg-emerald-800" :
+                                        "bg-indigo-600 hover:bg-indigo-800"}`}
                             >
                                 <span>{isDownloaded ? "✅" : "📄"}</span>
                                 {isDownloaded ? "Download Again" : "Word"}
@@ -1189,13 +1217,13 @@ export default function DcPage() {
                                     <h3 className="text-lg font-bold text-gray-800 flex items-center gap-2">
                                         <span className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold
                                             ${dept === "ARCH" ? "bg-blue-100 text-blue-800" :
-                                            dept === "ST" ? "bg-green-100 text-green-800" :
-                                            dept === "ELECT" ? "bg-purple-100 text-purple-800" :
-                                            dept === "MEP" ? "bg-amber-100 text-amber-800" :
-                                            "bg-gray-100 text-gray-800"}`}>
+                                                dept === "ST" ? "bg-green-100 text-green-800" :
+                                                    dept === "ELECT" ? "bg-purple-100 text-purple-800" :
+                                                        dept === "MEP" ? "bg-amber-100 text-amber-800" :
+                                                            "bg-gray-100 text-gray-800"}`}>
                                             {dept}
                                         </span>
-                                        {dept === "ST" ? "Civil/Structure" : dept} DepartmentS
+                                        {dept === "ST" ? "Civil/Structure" : dept} Department
                                         <span className="text-sm font-normal text-gray-500">
                                             ({list.length} items)
                                         </span>
@@ -1259,10 +1287,10 @@ export default function DcPage() {
                     ) : (
                         <div className="space-y-8">
                             {Object.keys(grouped).map((project) => (
-                                <ProjectSection 
-                                    key={project} 
-                                    project={project} 
-                                    depts={grouped[project]} 
+                                <ProjectSection
+                                    key={project}
+                                    project={project}
+                                    depts={grouped[project]}
                                 />
                             ))}
                         </div>

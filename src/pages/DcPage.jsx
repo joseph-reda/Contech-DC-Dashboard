@@ -1,11 +1,11 @@
 // src/pages/DcPage.jsx
-import { useEffect, useState, useCallback, memo } from "react";
+import { useEffect, useState, useCallback, memo, useRef } from "react"; // أضف useRef
 import { copyRow, copyAllRows } from "../firebaseService";
 import { API_URL } from "../config";
 import { useNavigate } from "react-router-dom";
-import { 
-    formatIrNumber, 
-    formatDateShort, 
+import {
+    formatIrNumber,
+    formatDateShort,
     getDepartmentAbbr,
     extractTime
 } from "../utils/formatters";
@@ -20,6 +20,12 @@ export default function DcPage() {
     const [downloadedIRs, setDownloadedIRs] = useState(new Set());
     const [searchTerm, setSearchTerm] = useState("");
     const [error, setError] = useState(null);
+    
+    // Refs لحفظ الحالة
+    const customNumbersRef = useRef({});
+    const tableContainerRef = useRef(null);
+    const scrollPositionRef = useRef(0);
+    const inputRefs = useRef({});
 
     // Advanced Filters only (no more sidebar)
     const [filters, setFilters] = useState({
@@ -38,6 +44,31 @@ export default function DcPage() {
         }
     }, [navigate]);
 
+    // حفظ موضع التمرير قبل التحديثات
+    useEffect(() => {
+        const handleBeforeUpdate = () => {
+            if (tableContainerRef.current) {
+                scrollPositionRef.current = tableContainerRef.current.scrollTop;
+            }
+        };
+
+        // يمكنك إضافة event listener إذا لزم الأمر
+        return () => {
+            // تنظيف إذا لزم
+        };
+    }, []);
+
+    // استعادة موضع التمرير بعد تحديث البيانات
+    useEffect(() => {
+        if (tableContainerRef.current && scrollPositionRef.current > 0) {
+            setTimeout(() => {
+                if (tableContainerRef.current) {
+                    tableContainerRef.current.scrollTop = scrollPositionRef.current;
+                }
+            }, 100);
+        }
+    }, [irs]);
+
     async function parseJsonSafe(response) {
         const ct = response.headers.get("content-type") || "";
         if (ct.indexOf("application/json") !== -1) {
@@ -53,10 +84,16 @@ export default function DcPage() {
         setTimeout(() => setToast(""), 2200);
     }
 
-    // دالة إعادة تحميل البيانات
-    const loadAllData = useCallback(async () => {
+    // دالة محسنة لإعادة تحميل البيانات
+    const loadAllData = useCallback(async (preserveScroll = true) => {
         setLoading(true);
         setError(null);
+        
+        // حفظ موضع التمرير إذا طُلب
+        if (preserveScroll && tableContainerRef.current) {
+            scrollPositionRef.current = tableContainerRef.current.scrollTop;
+        }
+        
         try {
             const [resIrs, resRevs] = await Promise.all([
                 fetch(`${API_URL}/irs`),
@@ -123,6 +160,7 @@ export default function DcPage() {
                 }
             });
             setCustomNumbers(map);
+            customNumbersRef.current = map;
 
             setError(null);
         } catch (err) {
@@ -136,7 +174,7 @@ export default function DcPage() {
 
     // Load all data once
     useEffect(() => {
-        loadAllData();
+        loadAllData(false);
     }, [loadAllData]);
 
     // 🔧 Helper Functions
@@ -249,7 +287,7 @@ export default function DcPage() {
             const term = searchTerm.toLowerCase();
             const irNumber = formatIrNumber(ir.irNo).toLowerCase();
             const revNumber = ir.isRevision ? getRevDisplayNumber(ir).toLowerCase() : "";
-            
+
             return (
                 irNumber.includes(term) ||
                 revNumber.includes(term) ||
@@ -276,10 +314,18 @@ export default function DcPage() {
         grouped[project][deptKey].push(ir);
     });
 
-    // 🛠️ Action Handlers
-    const handleArchive = useCallback(async (irNo) => {
+    // 🛠️ Action Handlers محسنة
+    const handleArchive = useCallback(async (irNo, event) => {
+        if (event) {
+            event.preventDefault();
+            event.stopPropagation();
+        }
+        
         const item = irs.find((x) => x.irNo === irNo || x.revNo === irNo);
-        if (!item) return showToast("Item not found");
+        if (!item) {
+            showToast("Item not found");
+            return;
+        }
 
         const itemName = item.isRevision ? "Revision" : (item.isCPR ? "CPR" : "IR");
 
@@ -302,16 +348,19 @@ export default function DcPage() {
             const json = await parseJsonSafe(res);
             if (!res.ok) throw new Error(json.error || "Archive failed");
 
-            // تحديث الـ state محلياً
+            // تحديث الـ state محلياً دون إعادة تحميل كاملة
             setIRs((prev) => prev.filter((x) => x.irNo !== irNo && x.revNo !== irNo));
-            
+
             // تحديث custom numbers
             setCustomNumbers(prev => {
                 const newMap = { ...prev };
                 delete newMap[irNo];
                 return newMap;
             });
-            
+
+            // تحديث الـ ref
+            delete customNumbersRef.current[irNo];
+
             showToast(`✅ ${itemName} archived successfully!`);
 
         } catch (err) {
@@ -419,6 +468,10 @@ export default function DcPage() {
                     newMap[newIrNo] = newIrNo;
                     return newMap;
                 });
+                
+                // تحديث الـ ref
+                delete customNumbersRef.current[item.irNo];
+                customNumbersRef.current[newIrNo] = newIrNo;
             }
 
             // تحديث downloadedIRs
@@ -442,7 +495,7 @@ export default function DcPage() {
             return;
         }
 
-        const customNumber = customNumbers[ir.irNo];
+        const customNumber = customNumbers[ir.irNo] || customNumbersRef.current[ir.irNo];
         const finalIR = customNumber && customNumber.trim() !== "" ? customNumber : ir.irNo;
 
         try {
@@ -514,13 +567,14 @@ export default function DcPage() {
         }
     }, [customNumbers, getTodayDateStr, markItemAsDone]);
 
+    // دالة محسنة لتحديث أرقام IR
     const handleConfirmSerial = useCallback(async (ir) => {
         if (ir.isRevision) {
             showToast("Cannot update revision numbers");
             return;
         }
 
-        const newValue = (customNumbers[ir.irNo] || "").trim();
+        const newValue = (customNumbers[ir.irNo] || customNumbersRef.current[ir.irNo] || "").trim();
         if (!newValue) {
             showToast("Please enter a new IR number");
             return;
@@ -565,7 +619,7 @@ export default function DcPage() {
             // تحديث الرقم في الـ state محلياً
             const cleanProject = ir.project.replace(/ /g, "-").toUpperCase();
             const deptCode = getDepartmentAbbr(ir.department);
-            
+
             let newIrNo;
             if (ir.requestType === "CPR" || ir.isCPR) {
                 newIrNo = `BADYA-CON-${cleanProject}-CPR-${numericSerial.toString().padStart(3, '0')}`;
@@ -573,20 +627,14 @@ export default function DcPage() {
                 newIrNo = `BADYA-CON-${cleanProject}-IR-${deptCode}-${numericSerial.toString().padStart(3, '0')}`;
             }
 
-            // تحديث IRs في الـ state دون إعادة إنشاء المصفوفة
-            setIRs(prev => 
+            // تحديث IRs في الـ state بشكل محدد
+            setIRs(prev =>
                 prev.map(item => {
                     if (item.irNo === ir.irNo) {
-                        return { 
-                            ...item, 
-                            irNo: newIrNo,
-                            desc: item.desc || '',
-                            project: item.project || '',
-                            department: item.department || '',
-                            user: item.user || '',
-                            sentAt: item.sentAt || '',
-                            isDone: item.isDone || false,
-                            tags: item.tags || { engineer: [], sd: [] }
+                        return {
+                            ...item,
+                            irNo: newIrNo
+                            // لا تعيد جميع الحواسلت للحفاظ على التركيز
                         };
                     }
                     return item;
@@ -601,8 +649,12 @@ export default function DcPage() {
                 return newMap;
             });
 
+            // تحديث الـ ref
+            delete customNumbersRef.current[ir.irNo];
+            customNumbersRef.current[newIrNo] = newIrNo;
+
             showToast(`✅ IR number updated to ${newIrNo}`);
-            
+
             return json;
 
         } catch (err) {
@@ -679,7 +731,7 @@ export default function DcPage() {
                     <div className="flex-1">
                         <p className="font-medium text-red-700">{error}</p>
                         <button
-                            onClick={loadAllData}
+                            onClick={() => loadAllData(true)}
                             className="mt-2 text-sm text-red-600 hover:text-red-800 font-medium"
                         >
                             Click here to retry
@@ -836,7 +888,7 @@ export default function DcPage() {
             <div className="text-gray-400 text-6xl mb-4">📭</div>
             <h3 className="text-xl font-semibold text-gray-700 mb-2">No Items Found</h3>
             <p className="text-gray-500 mb-4">
-                {irs.length === 0 
+                {irs.length === 0
                     ? "No items in the system yet. Wait for engineers to submit requests."
                     : "No items match your current filters. Try adjusting your search criteria."}
             </p>
@@ -893,14 +945,20 @@ export default function DcPage() {
                 <div className="flex gap-2">
                     {!rev.isDone && (
                         <button
-                            onClick={() => markRevDone(rev.irNo || rev.revNo)}
+                            onClick={(e) => {
+                                e.stopPropagation();
+                                markRevDone(rev.irNo || rev.revNo);
+                            }}
                             className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-black text-white rounded-lg transition flex-1"
                         >
                             Mark Done
                         </button>
                     )}
                     <button
-                        onClick={() => handleArchive(rev.irNo || rev.revNo)}
+                        onClick={(e) => {
+                            e.stopPropagation();
+                            handleArchive(rev.irNo || rev.revNo, e);
+                        }}
                         className="px-3 py-1.5 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition flex-1"
                     >
                         Archive
@@ -913,6 +971,28 @@ export default function DcPage() {
     const IRTableRow = memo(({ ir, dept }) => {
         const isDownloaded = downloadedIRs.has(ir.irNo) || ir.isDone;
         const isCPR = ir.isCPR || ir.requestType === "CPR";
+        const inputRef = useRef(null);
+
+        // حفظ مرجع الـ input
+        useEffect(() => {
+            if (inputRef.current) {
+                inputRefs.current[ir.irNo] = inputRef.current;
+            }
+        }, [ir.irNo]);
+
+        const handleInputChange = (e) => {
+            const value = e.target.value;
+            setCustomNumbers(prev => ({
+                ...prev,
+                [ir.irNo]: value
+            }));
+            customNumbersRef.current[ir.irNo] = value;
+        };
+
+        const handleUpdateClick = (e) => {
+            e.stopPropagation();
+            handleConfirmSerial(ir);
+        };
 
         return (
             <tr className={`border-b transition-colors
@@ -934,18 +1014,14 @@ export default function DcPage() {
                                 </div>
 
                                 <input
+                                    ref={inputRef}
                                     className="w-full border border-gray-300 px-2 py-2 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none pr-24 mt-2"
                                     value={customNumbers[ir.irNo] !== undefined ? customNumbers[ir.irNo] : formatIrNumber(ir.irNo)}
-                                    onChange={(e) => {
-                                        setCustomNumbers(prev => ({
-                                            ...prev,
-                                            [ir.irNo]: e.target.value
-                                        }));
-                                    }}
+                                    onChange={handleInputChange}
                                     onKeyDown={(e) => {
                                         if (e.key === 'Enter') {
-                                            handleConfirmSerial(ir);
                                             e.preventDefault();
+                                            handleConfirmSerial(ir);
                                         }
                                     }}
                                     placeholder="Change IR number..."
@@ -953,15 +1029,11 @@ export default function DcPage() {
                                 />
                                 <button
                                     disabled={!!savingSerials[ir.irNo]}
-                                    onClick={(e) => {
-                                        e.stopPropagation();
-                                        handleConfirmSerial(ir);
-                                    }}
-                                    className={`absolute right-1 bottom-1 px-3 py-1.5 rounded text-sm font-medium ${
-                                        savingSerials[ir.irNo] ?
-                                        "bg-gray-400 text-gray-700 cursor-not-allowed" :
-                                        "bg-emerald-600 hover:bg-emerald-700 text-white"
-                                    }`}
+                                    onClick={handleUpdateClick}
+                                    className={`absolute right-1 bottom-1 px-3 py-1.5 rounded text-sm font-medium ${savingSerials[ir.irNo] ?
+                                            "bg-gray-400 text-gray-700 cursor-not-allowed" :
+                                            "bg-emerald-600 hover:bg-emerald-700 text-white"
+                                        }`}
                                 >
                                     {savingSerials[ir.irNo] ? "..." : "Update"}
                                 </button>
@@ -1061,13 +1133,19 @@ export default function DcPage() {
                     <div className="flex gap-2">
                         <div className="flex flex-col gap-2">
                             <button
-                                onClick={() => handleCopy(ir)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleCopy(ir);
+                                }}
                                 className="px-3 py-2 bg-blue-600 hover:bg-blue-800 text-white rounded text-sm flex items-center gap-2 shadow-sm min-w-[80px]"
                             >
                                 <span>📋</span> Copy
                             </button>
                             <button
-                                onClick={() => handleDownloadWord(ir)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleDownloadWord(ir);
+                                }}
                                 className={`px-3 py-2 text-white rounded text-sm flex items-center gap-2 shadow-sm min-w-[80px]
                                     ${isDownloaded ?
                                         "bg-emerald-600 hover:bg-emerald-800" :
@@ -1080,7 +1158,10 @@ export default function DcPage() {
 
                         <div className="flex flex-col gap-2">
                             <button
-                                onClick={() => handleArchive(ir.irNo)}
+                                onClick={(e) => {
+                                    e.stopPropagation();
+                                    handleArchive(ir.irNo, e);
+                                }}
                                 className="px-3 py-2 bg-amber-600 hover:bg-amber-800 text-white rounded text-sm flex items-center gap-2 shadow-sm min-w-[80px]"
                             >
                                 <span>📁</span> Archive
@@ -1124,7 +1205,8 @@ export default function DcPage() {
                         </div>
                         <div className="flex gap-2">
                             <button
-                                onClick={() => {
+                                onClick={(e) => {
+                                    e.stopPropagation();
                                     const allItems = Object.values(depts).flat();
                                     handleCopyAll(allItems.filter(item => !item.isRevision));
                                 }}
@@ -1175,7 +1257,10 @@ export default function DcPage() {
                                     </h3>
                                     <div className="flex items-center gap-3">
                                         <button
-                                            onClick={() => handleCopyAll(list)}
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                handleCopyAll(list);
+                                            }}
                                             className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
                                         >
                                             Copy All
@@ -1183,7 +1268,7 @@ export default function DcPage() {
                                     </div>
                                 </div>
 
-                                <div className="overflow-x-auto rounded-lg border">
+                                <div className="overflow-x-auto rounded-lg border" ref={tableContainerRef}>
                                     <table className="w-full">
                                         <thead className="bg-gray-900 text-white">
                                             <tr>
@@ -1197,11 +1282,11 @@ export default function DcPage() {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {list.map((ir, index) => (
-                                                <IRTableRow 
-                                                    key={`${ir.irNo}-${ir.sentAt || ''}-${index}`}
-                                                    ir={ir} 
-                                                    dept={dept} 
+                                            {list.map((ir) => (
+                                                <IRTableRow
+                                                    key={`${ir.irNo}-${ir.sentAt || ''}`}
+                                                    ir={ir}
+                                                    dept={dept}
                                                 />
                                             ))}
                                         </tbody>
@@ -1238,7 +1323,7 @@ export default function DcPage() {
                             Showing: <span className="font-bold text-green-600">{filteredIRs.length}</span>
                             <span className="mx-3">•</span>
                             <button
-                                onClick={loadAllData}
+                                onClick={() => loadAllData(true)}
                                 className="text-blue-500 hover:text-blue-700 font-medium"
                             >
                                 🔄 Refresh
@@ -1291,27 +1376,27 @@ export default function DcPage() {
                                     <div className="bg-white/50 p-3 rounded-lg">
                                         <p className="text-blue-700 text-sm font-medium">📋 IR/CPR Management</p>
                                         <p className="text-blue-600 text-xs mt-1">
-                                            • Update IR numbers before download<br/>
-                                            • Download Word files for each IR<br/>
-                                            • Archive completed items<br/>
+                                            • Update IR numbers before download<br />
+                                            • Download Word files for each IR<br />
+                                            • Archive completed items<br />
                                             • Copy data to clipboard
                                         </p>
                                     </div>
                                     <div className="bg-white/50 p-3 rounded-lg">
                                         <p className="text-emerald-700 text-sm font-medium">🔄 Revision Handling</p>
                                         <p className="text-emerald-600 text-xs mt-1">
-                                            • View all pending revisions<br/>
-                                            • Mark revisions as done<br/>
-                                            • Archive revisions when completed<br/>
+                                            • View all pending revisions<br />
+                                            • Mark revisions as done<br />
+                                            • Archive revisions when completed<br />
                                             • Separate revision counters
                                         </p>
                                     </div>
                                     <div className="bg-white/50 p-3 rounded-lg">
                                         <p className="text-purple-700 text-sm font-medium">⚡ Quick Actions</p>
                                         <p className="text-purple-600 text-xs mt-1">
-                                            • Search by any field<br/>
-                                            • Filter by project, department, type<br/>
-                                            • Copy all IRs in a department<br/>
+                                            • Search by any field<br />
+                                            • Filter by project, department, type<br />
+                                            • Copy all IRs in a department<br />
                                             • View detailed statistics
                                         </p>
                                     </div>

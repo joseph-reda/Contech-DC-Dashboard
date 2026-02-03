@@ -25,11 +25,17 @@ export default function App() {
     const [user, setUser] = useState(undefined);
     const [loading, setLoading] = useState(true);
 
+    // في index.js أو App.js
+    window.onerror = function (message, source, lineno, colno, error) {
+        console.log("Global error:", message, source);
+        return false; // لمنع عرض الخطأ في console
+    };
+
     useEffect(() => {
         const saved = JSON.parse(localStorage.getItem("user") || "null");
         setUser(saved);
         setLoading(false);
-        
+
         // Set system start time for uptime calculation
         if (!localStorage.getItem('system_start_time')) {
             localStorage.setItem('system_start_time', Date.now().toString());
@@ -66,118 +72,118 @@ export default function App() {
 
             <Routes>
                 {/* Login Route - Public */}
-                <Route 
-                    path="/login" 
-                    element={<LoginPage setUser={handleLogin} />} 
+                <Route
+                    path="/login"
+                    element={<LoginPage setUser={handleLogin} />}
                 />
 
                 {/* ADMIN ROUTES */}
-                <Route 
-                    path="/admin" 
+                <Route
+                    path="/admin"
                     element={
                         <ProtectedRoute allowedRoles={["admin"]}>
                             <AdminDashboard />
                         </ProtectedRoute>
-                    } 
+                    }
                 />
-                
-                <Route 
-                    path="/admin/users" 
+
+                <Route
+                    path="/admin/users"
                     element={
                         <ProtectedRoute allowedRoles={["admin"]}>
                             <UsersAdminPage />
                         </ProtectedRoute>
-                    } 
+                    }
                 />
-                
-                <Route 
-                    path="/admin/projects" 
+
+                <Route
+                    path="/admin/projects"
                     element={
                         <ProtectedRoute allowedRoles={["admin"]}>
                             <ProjectsAdmin />
                         </ProtectedRoute>
-                    } 
+                    }
                 />
-                
-                <Route 
-                    path="/admin/settings" 
+
+                <Route
+                    path="/admin/settings"
                     element={
                         <ProtectedRoute allowedRoles={["admin"]}>
                             <AdminSettings />
                         </ProtectedRoute>
-                    } 
+                    }
                 />
 
                 {/* ENGINEER ROUTES */}
-                <Route 
-                    path="/engineer" 
+                <Route
+                    path="/engineer"
                     element={
                         <ProtectedRoute allowedRoles={["engineer", "head", "admin"]}>
                             <EngineerPage />
                         </ProtectedRoute>
-                    } 
+                    }
                 />
-                
-                <Route 
-                    path="/engineer-records" 
+
+                <Route
+                    path="/engineer-records"
                     element={
                         <ProtectedRoute allowedRoles={["engineer", "head", "admin", "dc"]}>
                             <EngineerRecords />
                         </ProtectedRoute>
-                    } 
+                    }
                 />
 
                 {/* DC ROUTES */}
-                <Route 
-                    path="/dc" 
+                <Route
+                    path="/dc"
                     element={
                         <ProtectedRoute allowedRoles={["dc", "admin"]}>
                             <DcPage />
                         </ProtectedRoute>
-                    } 
+                    }
                 />
-                
-                <Route 
-                    path="/dc-archive" 
+
+                <Route
+                    path="/dc-archive"
                     element={
                         <ProtectedRoute allowedRoles={["dc", "admin"]}>
                             <DcArchive />
                         </ProtectedRoute>
-                    } 
+                    }
                 />
 
                 {/* DEFAULT ROUTE - Redirect based on role */}
-                <Route 
-                    path="/" 
+                <Route
+                    path="/"
                     element={
                         <ProtectedRoute>
                             {user ? (
                                 user.role === "admin" ? <AdminDashboard /> :
-                                user.role === "dc" ? <DcPage /> :
-                                user.role === "engineer" || user.role === "head" ? <EngineerPage /> :
-                                <LoginPage setUser={handleLogin} />
+                                    user.role === "dc" ? <DcPage /> :
+                                        user.role === "engineer" || user.role === "head" ? <EngineerPage /> :
+                                            <LoginPage setUser={handleLogin} />
                             ) : (
                                 <LoginPage setUser={handleLogin} />
                             )}
                         </ProtectedRoute>
-                    } 
+                    }
                 />
 
                 {/* 404 Route - Redirect to appropriate dashboard */}
-                <Route 
-                    path="*" 
+                <Route
+                    path="*"
                     element={
                         <ProtectedRoute>
                             {user ? (
                                 user.role === "admin" ? <AdminDashboard /> :
-                                user.role === "dc" ? <DcPage /> :
-                                user.role === "engineer" || user.role === "head" ? <EngineerPage /> :
-                                <LoginPage setUser={handleLogin} />
+                                    user.role === "dc" ? <DcPage /> :
+                                        user.role === "engineer" || user.role === "head" ? <EngineerPage /> :
+                                            <LoginPage setUser={handleLogin} />
                             ) : (
                                 <LoginPage setUser={handleLogin} />
                             )}
                         </ProtectedRoute>
-                    } 
+                    }
                 />
             </Routes>
         </>

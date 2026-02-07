@@ -1,4 +1,3 @@
-// src/App.jsx
 import { Routes, Route } from "react-router-dom";
 import { useEffect, useState } from "react";
 
@@ -12,11 +11,14 @@ import EngineerRecords from "./pages/EngineerRecords.jsx";
 import DcPage from "./pages/DcPage.jsx";
 import DcArchive from "./pages/DcArchive.jsx";
 
-// Admin Pages
-import AdminDashboard from "./pages/AdminDashboard.jsx";
-import ProjectsAdmin from "./pages/ProjectsAdmin.jsx";
-import UsersAdminPage from "./pages/UsersAdminPage.jsx";
-import AdminSettings from "./pages/AdminSettings.jsx"; // New page
+// NEW: Super Admin Panel (Replaces old admin pages)
+import SuperAdminPanel from "./pages/SuperAdminPanel.jsx";
+
+// OLD ADMIN PAGES (Kept for reference/backup - remove from imports if not needed)
+// import AdminDashboard from "./pages/AdminDashboard.jsx";
+// import ProjectsAdmin from "./pages/ProjectsAdmin.jsx";
+// import UsersAdminPage from "./pages/UsersAdminPage.jsx";
+// import AdminSettings from "./pages/AdminSettings.jsx";
 
 // Components
 import Navbar from "./components/Navbar.jsx";
@@ -25,10 +27,10 @@ export default function App() {
     const [user, setUser] = useState(undefined);
     const [loading, setLoading] = useState(true);
 
-    // في index.js أو App.js
+    // Global error handler
     window.onerror = function (message, source, lineno, colno, error) {
         console.log("Global error:", message, source);
-        return false; // لمنع عرض الخطأ في console
+        return false;
     };
 
     useEffect(() => {
@@ -71,15 +73,33 @@ export default function App() {
             {user && <Navbar user={user} onLogout={handleLogout} />}
 
             <Routes>
-                {/* Login Route - Public */}
+                {/* ============================
+                    LOGIN ROUTE - PUBLIC
+                ============================= */}
                 <Route
                     path="/login"
                     element={<LoginPage setUser={handleLogin} />}
                 />
 
-                {/* ADMIN ROUTES */}
+                {/* ============================
+                    SUPER ADMIN PANEL - NEW SYSTEM (Replaces all old admin routes)
+                ============================= */}
                 <Route
                     path="/admin"
+                    element={
+                        <ProtectedRoute allowedRoles={["admin"]}>
+                            <SuperAdminPanel />
+                        </ProtectedRoute>
+                    }
+                />
+
+                {/* ============================
+                    OLD ADMIN ROUTES - REDIRECTED TO SUPER ADMIN PANEL
+                    (Comment out or remove these if you want to redirect all admin traffic)
+                ============================= */}
+                {/* 
+                <Route
+                    path="/admin-old"  // Changed from /admin to /admin-old for backup
                     element={
                         <ProtectedRoute allowedRoles={["admin"]}>
                             <AdminDashboard />
@@ -88,7 +108,7 @@ export default function App() {
                 />
 
                 <Route
-                    path="/admin/users"
+                    path="/admin-old/users"  // Changed from /admin/users
                     element={
                         <ProtectedRoute allowedRoles={["admin"]}>
                             <UsersAdminPage />
@@ -97,7 +117,7 @@ export default function App() {
                 />
 
                 <Route
-                    path="/admin/projects"
+                    path="/admin-old/projects"  // Changed from /admin/projects
                     element={
                         <ProtectedRoute allowedRoles={["admin"]}>
                             <ProjectsAdmin />
@@ -106,15 +126,18 @@ export default function App() {
                 />
 
                 <Route
-                    path="/admin/settings"
+                    path="/admin-old/settings"  // Changed from /admin/settings
                     element={
                         <ProtectedRoute allowedRoles={["admin"]}>
                             <AdminSettings />
                         </ProtectedRoute>
                     }
                 />
+                */}
 
-                {/* ENGINEER ROUTES */}
+                {/* ============================
+                    ENGINEER ROUTES
+                ============================= */}
                 <Route
                     path="/engineer"
                     element={
@@ -133,7 +156,9 @@ export default function App() {
                     }
                 />
 
-                {/* DC ROUTES */}
+                {/* ============================
+                    DC ROUTES
+                ============================= */}
                 <Route
                     path="/dc"
                     element={
@@ -152,16 +177,21 @@ export default function App() {
                     }
                 />
 
-                {/* DEFAULT ROUTE - Redirect based on role */}
+                {/* ============================
+                    DEFAULT ROUTE - Redirect based on role
+                    All admins now go to SuperAdminPanel
+                ============================= */}
                 <Route
                     path="/"
                     element={
                         <ProtectedRoute>
                             {user ? (
-                                user.role === "admin" ? <AdminDashboard /> :
-                                    user.role === "dc" ? <DcPage /> :
-                                        user.role === "engineer" || user.role === "head" ? <EngineerPage /> :
-                                            <LoginPage setUser={handleLogin} />
+                                user.role === "admin" ? (
+                                    <SuperAdminPanel /> // New admin panel
+                                ) :
+                                user.role === "dc" ? <DcPage /> :
+                                user.role === "engineer" || user.role === "head" ? <EngineerPage /> :
+                                <LoginPage setUser={handleLogin} />
                             ) : (
                                 <LoginPage setUser={handleLogin} />
                             )}
@@ -169,16 +199,21 @@ export default function App() {
                     }
                 />
 
-                {/* 404 Route - Redirect to appropriate dashboard */}
+                {/* ============================
+                    404 Route - Redirect to appropriate dashboard
+                    All admins now go to SuperAdminPanel
+                ============================= */}
                 <Route
                     path="*"
                     element={
                         <ProtectedRoute>
                             {user ? (
-                                user.role === "admin" ? <AdminDashboard /> :
-                                    user.role === "dc" ? <DcPage /> :
-                                        user.role === "engineer" || user.role === "head" ? <EngineerPage /> :
-                                            <LoginPage setUser={handleLogin} />
+                                user.role === "admin" ? (
+                                    <SuperAdminPanel /> // New admin panel for all admin 404s
+                                ) :
+                                user.role === "dc" ? <DcPage /> :
+                                user.role === "engineer" || user.role === "head" ? <EngineerPage /> :
+                                <LoginPage setUser={handleLogin} />
                             ) : (
                                 <LoginPage setUser={handleLogin} />
                             )}

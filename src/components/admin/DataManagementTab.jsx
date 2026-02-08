@@ -4,6 +4,7 @@ import { API_URL } from "../../config";
 
 export default function DataManagementTab() {
     const [loading, setLoading] = useState(true);
+    const [refreshingData, setRefreshingData] = useState(false);
     const [saving, setSaving] = useState(false);
     const [toast, setToast] = useState({ show: false, message: "", type: "" });
     const [activeSection, setActiveSection] = useState("location_rules");
@@ -82,19 +83,22 @@ export default function DataManagementTab() {
     }, []);
 
     const loadAllData = async () => {
+        if (refreshingData) return; // منع التحميل المزدوج
+        
         setLoading(true);
+        setRefreshingData(true);
         try {
             await Promise.all([
                 loadProjects(),
                 loadLocationRules(),
-                loadGeneralDescriptions(),
-                loadCprDescriptions()
+                loadAllDescriptions()
             ]);
         } catch (error) {
             console.error("Failed to load data:", error);
             showToast("فشل في تحميل البيانات", "error");
         } finally {
             setLoading(false);
+            setRefreshingData(false);
         }
     };
 
@@ -128,56 +132,32 @@ export default function DataManagementTab() {
         }
     };
 
-    const loadGeneralDescriptions = async () => {
+    const loadAllDescriptions = async () => {
         try {
             const res = await fetch(`${API_URL}/admin/general-descriptions`);
             if (res.ok) {
                 const data = await res.json();
-                console.log("📥 Loaded general descriptions:", data);
+                console.log("📥 Loaded all descriptions:", data);
 
-                // ✅ تصحيح: استخراج البيانات بشكل صحيح
                 setGeneralDescriptions(data.general_descriptions || {});
-
-                // Initialize editing descriptions for first department
-                const firstDept = Object.keys(data.general_descriptions || {})[0] || "Architectural";
-                if (data.general_descriptions && data.general_descriptions[firstDept]) {
-                    const deptData = data.general_descriptions[firstDept];
-                    setEditingDescriptions({
-                        department: firstDept,
-                        base: deptData.base || [],
-                        floors: deptData.floors || [],
-                        type: "regular"
-                    });
-                    setSelectedDepartment(firstDept);
-                }
-            }
-        } catch (error) {
-            console.error("Failed to load general descriptions:", error);
-        }
-    };
-    const loadCprDescriptions = async () => {
-        try {
-            const res = await fetch(`${API_URL}/admin/general-descriptions`);
-            if (res.ok) {
-                const data = await res.json();
-                console.log("📥 Loaded CPR descriptions:", data);
-
-                // ✅ تصحيح: استخراج CPR descriptions فقط
                 setCprDescriptions(data.general_descriptions_cpr || {});
 
-                // إذا كان القسم الحالي هو Civil وكان النوع CPR
-                if (selectedDepartment === "Civil" && descriptionType === "cpr") {
-                    const civilData = data.general_descriptions_cpr?.Civil || {};
-                    setEditingDescriptions(prev => ({
-                        ...prev,
-                        base: civilData.base || [],
-                        floors: civilData.floors || [],
-                        type: "cpr"
-                    }));
-                }
+                // Initialize editing descriptions for first department
+                const departments = ["Architectural", "Civil", "Electrical", "Mechanical", "Survey"];
+                const firstDept = departments[0];
+                
+                const deptData = data.general_descriptions?.[firstDept] || {};
+                setEditingDescriptions({
+                    department: firstDept,
+                    base: deptData.base || [],
+                    floors: deptData.floors || [],
+                    type: "regular"
+                });
+                setSelectedDepartment(firstDept);
             }
         } catch (error) {
-            console.error("Failed to load CPR descriptions:", error);
+            console.error("Failed to load descriptions:", error);
+            showToast("فشل في تحميل الأوصاف", "error");
         }
     };
 
@@ -234,7 +214,12 @@ export default function DataManagementTab() {
 
             if (res.ok) {
                 showToast(`تم حفظ قواعد موقع ${editingProjectRules.project}`, "success");
-                loadLocationRules();
+                
+                // ✅ إعادة تحميل كل من location rules والمشاريع
+                await Promise.all([
+                    loadLocationRules(),
+                    loadProjects()
+                ]);
             } else {
                 throw new Error("Failed to save location rules");
             }
@@ -266,7 +251,7 @@ export default function DataManagementTab() {
 
             if (res.ok) {
                 showToast(`تم حذف قواعد موقع ${projectName}`, "success");
-                loadLocationRules();
+                await loadLocationRules();
 
                 // Reset editing if it's the current project
                 if (editingProjectRules.project === projectName) {
@@ -282,35 +267,44 @@ export default function DataManagementTab() {
     };
 
     // General Descriptions Functions
-    const handleSelectDepartment = (dept, type = "regular") => {
+    const handleSelectDepartment = async (dept, type = "regular") => {
         console.log(`🔄 Selecting department: ${dept}, type: ${type}`);
 
         setSelectedDepartment(dept);
         setDescriptionType(type);
 
+        let descriptionsData = { base: [], floors: [] };
+
         if (type === "cpr") {
             // Load CPR descriptions for Civil department
-            const civilData = cprDescriptions.Civil || {};
-            setEditingDescriptions({
-                department: "Civil",
-                base: civilData.base || [],
-                floors: civilData.floors || [],
-                type: "cpr"
-            });
+            descriptionsData = cprDescriptions.Civil || {};
         } else {
             // Load regular descriptions
-            const deptData = generalDescriptions[dept] || {};
-            setEditingDescriptions({
-                department: dept,
-                base: deptData.base || [],
-                floors: deptData.floors || [],
-                type: "regular"
-            });
+            descriptionsData = generalDescriptions[dept] || {};
+            
+            // إذا لم تكن البيانات متوفرة محلياً، جلبها من الخادم
+            if (!descriptionsData.base && !descriptionsData.floors) {
+                try {
+                    const res = await fetch(`${API_URL}/admin/general-descriptions/${dept}`);
+                    if (res.ok) {
+                        const data = await res.json();
+                        descriptionsData = data.regular_descriptions || {};
+                    }
+                } catch (error) {
+                    console.error("Failed to fetch department descriptions:", error);
+                }
+            }
         }
+
+        setEditingDescriptions({
+            department: dept,
+            base: descriptionsData.base || [],
+            floors: descriptionsData.floors || [],
+            type: type
+        });
 
         showToast(`تم تحميل أوصاف قسم ${dept}`, "info");
     };
-
 
     const handleAddDescription = () => {
         if (!newDescription.text.trim()) {
@@ -323,6 +317,7 @@ export default function DataManagementTab() {
         if (newDescription.type === "base") {
             // Add to base descriptions
             updatedDescriptions.base = [...updatedDescriptions.base, newDescription.text.trim()];
+            showToast(`تمت إضافة وصف جديد: ${newDescription.text.trim().substring(0, 30)}...`, "success");
         } else {
             // Add to floor descriptions
             if (!newDescription.floor.trim()) {
@@ -333,15 +328,14 @@ export default function DataManagementTab() {
             // Check if floor exists, otherwise add it
             if (!updatedDescriptions.floors.includes(newDescription.floor)) {
                 updatedDescriptions.floors = [...updatedDescriptions.floors, newDescription.floor];
+                showToast(`تمت إضافة طابق جديد: ${newDescription.floor}`, "success");
+            } else {
+                showToast("هذا الطابق موجود بالفعل", "info");
             }
-
-            // For simplicity, we're just adding to floors array
-            // In a real implementation, you might want a more complex structure
         }
 
         setEditingDescriptions(updatedDescriptions);
         setNewDescription({ text: "", type: "base", floor: "" });
-        showToast("تمت إضافة الوصف", "success");
     };
 
     const handleRemoveBaseDescription = (index) => {
@@ -376,11 +370,12 @@ export default function DataManagementTab() {
 
         setSaving(true);
         try {
+            // ✅ تصحيح بنية البيانات لتتوافق مع الخادم
             const requestData = {
                 department: editingDescriptions.department,
                 descriptions: {
-                    base: editingDescriptions.base,
-                    floors: editingDescriptions.floors
+                    base: editingDescriptions.base.filter(item => item.trim() !== ""),
+                    floors: editingDescriptions.floors.filter(item => item.trim() !== ""),
                 },
                 type: editingDescriptions.type
             };
@@ -399,8 +394,8 @@ export default function DataManagementTab() {
 
                 showToast(`تم حفظ أوصاف قسم ${editingDescriptions.department}`, "success");
 
-                // Reload all data
-                await loadAllData();
+                // إعادة تحميل جميع البيانات
+                await loadAllDescriptions();
             } else {
                 const errorData = await res.json();
                 throw new Error(errorData.error || "Failed to save descriptions");
@@ -436,11 +431,7 @@ export default function DataManagementTab() {
                 });
 
                 // Reload data
-                if (editingDescriptions.type === "cpr") {
-                    loadCprDescriptions();
-                } else {
-                    loadGeneralDescriptions();
-                }
+                await loadAllDescriptions();
             }
         } catch (error) {
             console.error("Delete descriptions error:", error);
@@ -466,7 +457,8 @@ export default function DataManagementTab() {
     const exportDescriptions = () => {
         const data = {
             general_descriptions: generalDescriptions,
-            general_descriptions_cpr: cprDescriptions
+            general_descriptions_cpr: cprDescriptions,
+            exported_at: new Date().toISOString()
         };
         const dataStr = JSON.stringify(data, null, 2);
         const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
@@ -490,7 +482,6 @@ export default function DataManagementTab() {
 
                 if (type === "location_rules") {
                     // Import location rules
-                    // This would require backend support for bulk import
                     showToast("استيراد قواعد المواقع يتطلب تطوير نقطة طرفية مخصصة", "info");
                 } else if (type === "descriptions") {
                     // Import descriptions
@@ -836,7 +827,9 @@ export default function DataManagementTab() {
                                         {descriptionType === "cpr" && " (أوصاف CPR)"}
                                     </p>
                                     <p className="text-xs text-gray-500 mt-1">
-                                        قاعدة البيانات: {generalDescriptions[selectedDepartment] ? "✅ موجود" : "❌ غير موجود"}
+                                        قاعدة البيانات: {descriptionType === "cpr" 
+                                            ? (cprDescriptions.Civil ? "✅ موجود" : "❌ غير موجود")
+                                            : (generalDescriptions[selectedDepartment] ? "✅ موجود" : "❌ غير موجود")}
                                     </p>
                                 </div>
                                 <div className="flex gap-2">
@@ -908,9 +901,10 @@ export default function DataManagementTab() {
                                         <button
                                             onClick={handleAddDescription}
                                             disabled={!newDescription.text.trim() || (newDescription.type === "floor" && !newDescription.floor)}
-                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50"
+                                            className="px-4 py-2 bg-green-600 hover:bg-green-700 text-white rounded-lg disabled:opacity-50 flex items-center gap-2 transition-all"
                                         >
-                                            إضافة
+                                            <span className="text-lg">+</span>
+                                            <span>إضافة</span>
                                         </button>
                                     </div>
                                 </div>

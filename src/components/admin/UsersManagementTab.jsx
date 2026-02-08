@@ -154,8 +154,8 @@ const handleSaveUser = async (e) => {
     try {
         // تحضير البيانات للإرسال
         const userData = {
-            username: userForm.username,
-            fullname: userForm.fullname,
+            username: userForm.username.toLowerCase().trim(),
+            fullname: userForm.fullname.trim(),
             department: userForm.department,
             role: userForm.role
         };
@@ -165,17 +165,10 @@ const handleSaveUser = async (e) => {
             userData.password = userForm.password;
         }
         
-        // ✅ تصحيح: استخدام المسار الصحيح
-        const url = editingUser 
-            ? `${API_URL}/users`  // استخدام POST لتحديث المستخدم الحالي
-            : `${API_URL}/users`; // استخدام POST لإضافة مستخدم جديد
-        
-        const method = 'POST';
-        
         console.log("📤 Sending user data:", userData);
         
-        const response = await fetch(url, {
-            method: method,
+        const response = await fetch(`${API_URL}/users`, {
+            method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(userData),
         });
@@ -204,7 +197,6 @@ const handleSaveUser = async (e) => {
         setLoading(false);
     }
 };
-
  const startEditUser = (user) => {
     console.log("✏️ Editing user:", user);
     setEditingUser(user);

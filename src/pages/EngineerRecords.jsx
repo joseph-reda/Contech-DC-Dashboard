@@ -38,85 +38,165 @@ export default function EngineerRecords() {
     }, [navigate, currentUser]);
 
     // تحميل سجلات القسم بالكامل (جميع المستخدمين في نفس القسم)
-    const loadDepartmentRecords = useCallback(async () => {
-        setLoading(true);
-        setError("");
-        try {
-            console.log(`📥 Loading records for department: ${userDepartment}`);
-            
-            // جلب جميع IRs للقسم
-            const irsRes = await fetch(`${API_URL}/irs`);
-            if (!irsRes.ok) throw new Error(`Failed to load IRs: ${irsRes.status}`);
-            
-            const irsData = await irsRes.json();
-            const allIRs = irsData.irs || [];
-            
-            // فلترة IRs حسب القسم
-            const departmentIRs = allIRs.filter(ir => 
-                ir.department && 
-                getDepartmentAbbr(ir.department) === getDepartmentAbbr(userDepartment)
-            );
-            
-            console.log(`✅ Found ${departmentIRs.length} IRs for department ${userDepartment}`);
+    // في EngineerRecords.jsx - استبدل دالة loadDepartmentRecords بهذا الكود
 
-            // جلب جميع Revisions للقسم
-            const revsRes = await fetch(`${API_URL}/revs`);
-            if (!revsRes.ok) throw new Error(`Failed to load Revisions: ${revsRes.status}`);
-            
-            const revsData = await revsRes.json();
-            const allRevisions = revsData.revs || [];
-            
-            // فلترة Revisions حسب القسم
-            const departmentRevisions = allRevisions.filter(rev => 
-                rev.department && 
-                getDepartmentAbbr(rev.department) === getDepartmentAbbr(userDepartment)
-            );
-            
-            console.log(`✅ Found ${departmentRevisions.length} Revisions for department ${userDepartment}`);
+const loadDepartmentRecords = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+        console.log(`📥 Loading records for department: ${userDepartment}`);
+        
+        // جلب جميع IRs للقسم من المجموعة الرئيسية
+        const irsRes = await fetch(`${API_URL}/irs`);
+        if (!irsRes.ok) throw new Error(`Failed to load IRs: ${irsRes.status}`);
+        
+        const irsData = await irsRes.json();
+        const allIRs = irsData.irs || [];
+        
+        // فلترة IRs حسب القسم
+        const departmentIRs = allIRs.filter(ir => 
+            ir.department && 
+            getDepartmentAbbr(ir.department) === getDepartmentAbbr(userDepartment)
+        );
+        
+        console.log(`✅ Found ${departmentIRs.length} IRs for department ${userDepartment}`);
 
-            // دمج IRs وRevisions
-            const allRecords = [
-                ...departmentIRs.map(ir => ({
-                    ...ir,
-                    isRevision: false,
-                    requestType: ir.requestType || "IR",
-                    archivedDate: ir.archivedAt || "",
-                    archivedBy: ir.archivedBy || "",
-                    itemType: "IR",
-                    displayNumber: ir.irNo,
-                    departmentAbbr: getDepartmentAbbr(ir.department),
-                    isCPR: isCPRItem(ir)
-                })),
-                ...departmentRevisions.map(rev => ({
-                    ...rev,
-                    isRevision: true,
-                    requestType: rev.parentRequestType || "IR",
-                    archivedDate: rev.archivedAt || "",
-                    archivedBy: rev.archivedBy || "",
-                    itemType: "REV",
-                    displayNumber: rev.displayNumber || rev.revNo,
-                    departmentAbbr: getDepartmentAbbr(rev.department),
-                    isCPRRevision: rev.revisionType === "CPR_REVISION" || rev.isCPRRevision
-                }))
-            ];
+        // جلب جميع Revisions للقسم من المجموعة الرئيسية
+        const revsRes = await fetch(`${API_URL}/revs`);
+        if (!revsRes.ok) throw new Error(`Failed to load Revisions: ${revsRes.status}`);
+        
+        const revsData = await revsRes.json();
+        const allRevisions = revsData.revs || [];
+        
+        // فلترة Revisions حسب القسم
+        const departmentRevisions = allRevisions.filter(rev => 
+            rev.department && 
+            getDepartmentAbbr(rev.department) === getDepartmentAbbr(userDepartment)
+        );
+        
+        console.log(`✅ Found ${departmentRevisions.length} Revisions for department ${userDepartment}`);
 
-            // ترتيب حسب التاريخ (الأحدث أولاً)
-            allRecords.sort((a, b) => 
-                new Date(b.sentAt || b.createdAt) - new Date(a.sentAt || a.createdAt)
-            );
+        // 🔴🔴🔴 الجزء المعدل 🔴🔴🔴
+        // جلب جميع العناصر المؤرشفة للقسم من archive_irs
+        const archiveIrsRes = await fetch(`${API_URL}/archive/dc`);
+        if (!archiveIrsRes.ok) throw new Error(`Failed to load archive IRs: ${archiveIrsRes.status}`);
+        
+        const archiveIrsData = await archiveIrsRes.json();
+        const allArchiveIRs = archiveIrsData.archive || [];
+        
+        // فلترة العناصر المؤرشفة حسب القسم
+        const departmentArchiveIRs = allArchiveIRs.filter(item => 
+            !item.isRevision && 
+            item.department && 
+            getDepartmentAbbr(item.department) === getDepartmentAbbr(userDepartment)
+        );
+        
+        console.log(`✅ Found ${departmentArchiveIRs.length} archived IRs for department ${userDepartment}`);
 
-            setRecords(allRecords);
-            setToast(`✅ Loaded ${allRecords.length} records from ${userDepartment} department`);
-            
-        } catch (err) {
-            console.error("Load department records error:", err);
-            setError("Failed to load department records. Please try again.");
-            setToast("❌ Error loading records");
-        } finally {
-            setLoading(false);
-        }
-    }, [userDepartment]);
+        // جلب جميع Revisions المؤرشفة للقسم من archive_revs
+        const archiveRevsRes = await fetch(`${API_URL}/archive/dc`);
+        if (!archiveRevsRes.ok) throw new Error(`Failed to load archive Revisions: ${archiveRevsRes.status}`);
+        
+        const archiveRevsData = await archiveRevsRes.json();
+        const allArchiveRevs = archiveRevsData.archive || [];
+        
+        // فلترة Revisions المؤرشفة حسب القسم
+        const departmentArchiveRevs = allArchiveRevs.filter(item => 
+            item.isRevision && 
+            item.department && 
+            getDepartmentAbbr(item.department) === getDepartmentAbbr(userDepartment)
+        );
+        
+        console.log(`✅ Found ${departmentArchiveRevs.length} archived Revisions for department ${userDepartment}`);
 
+        // دمج جميع المصادر:
+        // 1. IRs النشطة
+        // 2. Revisions النشطة
+        // 3. IRs المؤرشفة (سواء بواسطة DC أو Engineer)
+        // 4. Revisions المؤرشفة (سواء بواسطة DC أو Engineer)
+        
+        const allRecords = [
+            // IRs نشطة
+            ...departmentIRs.map(ir => ({
+                ...ir,
+                isRevision: false,
+                requestType: ir.requestType || "IR",
+                archivedDate: ir.archivedAt || "",
+                archivedBy: ir.archivedBy || "",
+                itemType: "IR",
+                displayNumber: ir.irNo,
+                departmentAbbr: getDepartmentAbbr(ir.department),
+                isCPR: isCPRItem(ir)
+            })),
+            // Revisions نشطة
+            ...departmentRevisions.map(rev => ({
+                ...rev,
+                isRevision: true,
+                requestType: rev.parentRequestType || "IR",
+                archivedDate: rev.archivedAt || "",
+                archivedBy: rev.archivedBy || "",
+                itemType: "REV",
+                displayNumber: rev.displayNumber || rev.revNo,
+                departmentAbbr: getDepartmentAbbr(rev.department),
+                isCPRRevision: rev.revisionType === "CPR_REVISION" || rev.isCPRRevision
+            })),
+            // IRs مؤرشفة (سواء بواسطة DC أو Engineer)
+            ...departmentArchiveIRs.map(ir => ({
+                ...ir,
+                isRevision: false,
+                requestType: ir.requestType || "IR",
+                archivedDate: ir.archivedAt || "",
+                archivedBy: ir.archivedBy || "",
+                itemType: "IR",
+                displayNumber: ir.irNo,
+                departmentAbbr: getDepartmentAbbr(ir.department),
+                isCPR: isCPRItem(ir),
+                isArchived: true // تأكيد أن العنصر مؤرشف
+            })),
+            // Revisions مؤرشفة (سواء بواسطة DC أو Engineer)
+            ...departmentArchiveRevs.map(rev => ({
+                ...rev,
+                isRevision: true,
+                requestType: rev.parentRequestType || "IR",
+                archivedDate: rev.archivedAt || "",
+                archivedBy: rev.archivedBy || "",
+                itemType: "REV",
+                displayNumber: rev.displayNumber || rev.revNo,
+                departmentAbbr: getDepartmentAbbr(rev.department),
+                isCPRRevision: rev.revisionType === "CPR_REVISION" || rev.isCPRRevision,
+                isArchived: true // تأكيد أن العنصر مؤرشف
+            }))
+        ];
+
+        // إزالة التكرارات (إذا كان نفس العنصر موجود في مكانين)
+        const uniqueRecords = [];
+        const seenIds = new Set();
+        
+        allRecords.forEach(record => {
+            const recordId = record.irNo || record.revNo;
+            if (!seenIds.has(recordId)) {
+                seenIds.add(recordId);
+                uniqueRecords.push(record);
+            }
+        });
+
+        // ترتيب حسب التاريخ (الأحدث أولاً)
+        uniqueRecords.sort((a, b) => 
+            new Date(b.sentAt || b.createdAt || b.archivedAt) - 
+            new Date(a.sentAt || a.createdAt || a.archivedAt)
+        );
+
+        setRecords(uniqueRecords);
+        setToast(`✅ Loaded ${uniqueRecords.length} records from ${userDepartment} department (${departmentArchiveIRs.length + departmentArchiveRevs.length} archived)`);
+        
+    } catch (err) {
+        console.error("Load department records error:", err);
+        setError("Failed to load department records. Please try again.");
+        setToast("❌ Error loading records");
+    } finally {
+        setLoading(false);
+    }
+}, [userDepartment]);
     useEffect(() => {
         loadDepartmentRecords();
     }, [loadDepartmentRecords]);

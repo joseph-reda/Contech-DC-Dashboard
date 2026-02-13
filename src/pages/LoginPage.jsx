@@ -12,7 +12,7 @@ export default function LoginPage({ setUser }) {
     const navigate = useNavigate();
 
     async function handleLogin(e) {
-        e.preventDefault();
+        e.preventDefault(); // X reload page on form submit
         setLoading(true);
         setErrorMsg("");
 
@@ -25,14 +25,12 @@ export default function LoginPage({ setUser }) {
                 },
                 body: JSON.stringify({
                     username: username.trim().toLowerCase(),
-                    password: password.trim(), // Removed .toLowerCase() - passwords are case-sensitive
+                    password: password.trim(),
                 }),
-                credentials: 'include', // Added for CORS with credentials
+                credentials: 'include', // for CORS
             });
 
-            // Check if response is OK before parsing JSON
             if (!res.ok) {
-                // Try to get error message from response
                 try {
                     const errorData = await res.json();
                     setErrorMsg(errorData.error || `Login failed (Status: ${res.status})`);
@@ -45,7 +43,6 @@ export default function LoginPage({ setUser }) {
 
             const json = await res.json();
 
-            // Validate response structure
             if (!json.user) {
                 setErrorMsg("Invalid response from server");
                 setLoading(false);
@@ -56,7 +53,6 @@ export default function LoginPage({ setUser }) {
             localStorage.setItem("user", JSON.stringify(json.user));
             setUser(json.user);
 
-            // Redirect based on role
             if (json.user.role === "admin") {
                 navigate("/admin");
             } else if (json.user.role === "dc") {
@@ -75,7 +71,6 @@ export default function LoginPage({ setUser }) {
         }
     }
 
-    // Handle Enter key press
     const handleKeyPress = (e) => {
         if (e.key === 'Enter' && !loading) {
             handleLogin(e);
@@ -109,7 +104,7 @@ export default function LoginPage({ setUser }) {
                         onChange={(e) => setUsername(e.target.value)}
                         required
                         autoComplete="username"
-                        disabled={loading}
+                        disabled={loading} // Prevent changes while loading
                         placeholder="Enter your username"
                     />
                 </div>
@@ -148,17 +143,6 @@ export default function LoginPage({ setUser }) {
                         "Login"
                     )}
                 </button>
-
-                <p className="text-center text-gray-500 text-sm mt-6 pt-4 border-t border-gray-200">
-                    <span className="text-red-500">⚠</span> All access is monitored for security purposes
-                </p>
-
-                {/* Development hint */}
-                {process.env.NODE_ENV === 'development' && (
-                    <div className="mt-4 p-2 bg-yellow-50 border border-yellow-200 rounded text-xs text-yellow-800">
-                        <strong>Development Mode:</strong> API URL: {API_URL}
-                    </div>
-                )}
             </form>
         </div>
     );

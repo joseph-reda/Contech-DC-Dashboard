@@ -1,11 +1,11 @@
 // src/components/SearchableInput.jsx
 import { useState, useEffect, useRef } from 'react';
 
-export default function SearchableInput({ 
-    label, 
-    options = [], 
-    value, 
-    onChange, 
+export default function SearchableInput({
+    label,
+    options = [],
+    value,
+    onChange,
     placeholder = "Select...",
     disabled = false,
     loading = false,
@@ -35,7 +35,7 @@ export default function SearchableInput({
                 setIsOpen(false);
             }
         }
-        
+
         document.addEventListener("mousedown", handleClickOutside);
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
@@ -70,7 +70,7 @@ export default function SearchableInput({
                     {label}
                 </label>
             )}
-            
+
             <div className="relative">
                 <input
                     type="text"
@@ -80,18 +80,17 @@ export default function SearchableInput({
                     onFocus={() => !disabled && setIsOpen(true)}
                     placeholder={placeholder}
                     disabled={disabled}
-                    className={`w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${
-                        disabled ? 'bg-gray-100 cursor-not-allowed text-gray-500' : 'bg-white'
-                    }`}
+                    className={`w-full p-2.5 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition ${disabled ? 'bg-gray-100 cursor-not-allowed text-gray-500' : 'bg-white'
+                        }`}
                     readOnly={!isOpen && !disabled}
                 />
-                
+
                 {loading && (
                     <div className="absolute right-3 top-3">
                         <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-blue-600"></div>
                     </div>
                 )}
-                
+
                 {!loading && !disabled && (
                     <button
                         onClick={() => setIsOpen(!isOpen)}
@@ -116,9 +115,8 @@ export default function SearchableInput({
                             <div
                                 key={index}
                                 onClick={() => handleSelect(option)}
-                                className={`p-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition ${
-                                    value === option ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
-                                }`}
+                                className={`p-2.5 hover:bg-blue-50 cursor-pointer border-b border-gray-100 last:border-b-0 transition ${value === option ? 'bg-blue-50 text-blue-700' : 'text-gray-700'
+                                    }`}
                             >
                                 {String(option)}
                             </div>

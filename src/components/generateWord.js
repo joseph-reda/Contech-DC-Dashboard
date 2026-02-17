@@ -5,10 +5,8 @@ import { API_URL } from "../config";
 
 export async function downloadWord(ir) {
   try {
-    // استخراج اسم المستخدم من local storage
     const user = JSON.parse(localStorage.getItem("user") || "{}");
 
-    // ✅ الحصول على تاريخ اليوم
     const getTodayDate = () => {
       const now = new Date();
       return now.toLocaleDateString('en-GB', {
@@ -19,14 +17,13 @@ export async function downloadWord(ir) {
     };
 
     const payload = {
-      IRNo: ir.irNo || "",               // سوف يتم تجاهله والاستبدال بالرقم المولد
+      IRNo: ir.irNo || "",
       ProjectName: ir.project || "",     
       Description: ir.desc || "",         
-      ReceivedDate: getTodayDate(),       // ✅ تاريخ اليوم
+      ReceivedDate: getTodayDate(),
       requestType: ir.type || "IR",       
       department: ir.department || "",    
       downloadedBy: user.fullname || "",
-      // ✅ إضافة بيانات إضافية للتأكد
       desc: ir.desc || "",
       project: ir.project || "",
       department: ir.department || ""
@@ -51,7 +48,6 @@ export async function downloadWord(ir) {
     const a = document.createElement("a");
     a.href = url;
     
-    // ✅ تسمية الملف بالرقم الكامل
     let filename = ir.irNo || "document";
     if (!filename.includes("BADYA-CON")) {
       filename = `IR-${filename}`;

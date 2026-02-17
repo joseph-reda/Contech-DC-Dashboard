@@ -16,8 +16,11 @@ export default function SearchableInput({
     const [filteredOptions, setFilteredOptions] = useState([]);
     const wrapperRef = useRef(null);
 
+    // Filter options based on [search term] and [options] changes
     useEffect(() => {
         if (options && options.length > 0) {
+
+            // filtered عبارة عن [] بتحتوي على العناصر اللي بتطابق [search term] من [options]
             const filtered = options.filter(option => {
                 if (!option) return false;
                 const optionText = String(option).toLowerCase();
@@ -29,6 +32,7 @@ export default function SearchableInput({
         }
     }, [searchTerm, options]);
 
+    // handleClickOutside to close dropdown when clicking outside
     useEffect(() => {
         function handleClickOutside(event) {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target)) {
@@ -36,18 +40,21 @@ export default function SearchableInput({
             }
         }
 
+        // mousedown event clicks outside
         document.addEventListener("mousedown", handleClickOutside);
         return () => {
             document.removeEventListener("mousedown", handleClickOutside);
         };
     }, []);
 
+    // when user clicks on an option, we call onChange with the selected option, close the dropdown, and reset search term
     const handleSelect = (option) => {
         onChange(option);
         setIsOpen(false);
         setSearchTerm("");
     };
 
+    
     const handleInputChange = (e) => {
         if (isOpen) {
             setSearchTerm(e.target.value);

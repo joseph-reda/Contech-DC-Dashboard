@@ -3,7 +3,6 @@ import { useEffect, useState } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import SearchableInput from "../components/SearchableInput";
 import { API_URL } from "../config";
-
 export default function EngineerPage() {
     const [searchParams, setSearchParams] = useSearchParams();
     const navigate = useNavigate();
@@ -32,8 +31,6 @@ export default function EngineerPage() {
 
     // CPR
     const [pouringElement, setPouringElement] = useState("");
-
-
     const [irTags, setIrTags] = useState([]);
     const [sdTags, setSdTags] = useState([]);
     const [irInput, setIrInput] = useState("");

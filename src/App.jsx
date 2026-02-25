@@ -7,7 +7,7 @@ import ProtectedRoute from "./components/ProtectedRoute.jsx";
 // Pages
 import LoginPage from "./pages/LoginPage.jsx";
 import EngineerPage from "./pages/EngineerPage.jsx";
-// import EngineerRecords from "./pages/EngineerRecords.jsx";
+import EngineerRecords from "./pages/EngineerRecords.jsx";
 import DcPage from "./pages/DcPage.jsx";
 import DcArchive from "./pages/DcArchive.jsx";
 
@@ -147,14 +147,14 @@ export default function App() {
                     }
                 />
 
-                {/* <Route
+                 <Route
                     path="/engineer-records"
                     element={
                         <ProtectedRoute allowedRoles={["engineer", "head", "admin", "dc"]}>
                             <EngineerRecords />
                         </ProtectedRoute>
                     }
-                /> */}
+                /> 
 
                 {/* ============================
                     DC ROUTES

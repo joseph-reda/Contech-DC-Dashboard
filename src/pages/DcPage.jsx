@@ -1,4 +1,4 @@
-// src/pages/DcPage.jsx - النسخة النهائية مع فصل الأقسام داخل المشروع
+// src/pages/DcPage.jsx - النسخة النهائية مع حذف عمود Action بالكامل
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { copyRow, copyAllRows } from "../firebaseService";
 import { API_URL } from "../config";
@@ -111,7 +111,7 @@ const RevisionChip = memo(({ rev, onMarkDone, onArchive }) => {
     );
 });
 
-// ==================== CPRTableRow Component (خاص بـ CPR) - مع عرض Action فقط ====================
+// ==================== CPRTableRow Component (خاص بـ CPR) - بدون عمود Action ====================
 const CPRTableRow = memo(
     ({
         ir,
@@ -131,7 +131,7 @@ const CPRTableRow = memo(
 
         const locationType =
             typesMap && ir.location ? typesMap[ir.location] : "CPR";
-        const actionValue = ir.action || "";
+
         const handleInputChange = (e) => {
             const value = e.target.value;
             onUpdateSerial(ir.irNo, value, false);
@@ -155,7 +155,6 @@ const CPRTableRow = memo(
                 ...ir,
                 typesMap: typesMap,
                 locationType: locationType,
-                action: actionValue,
             };
             onCopy(itemWithType);
         };
@@ -266,23 +265,7 @@ const CPRTableRow = memo(
                     </div>
                 </td>
 
-                {/* عمود Action - عرض فقط (بدون تعديل) */}
-                <td className="p-3 align-top">
-                    <span
-                        className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-white ${actionValue === "A"
-                                ? "bg-green-600"
-                                : actionValue === "B"
-                                    ? "bg-blue-600" :
-                                    actionValue === ""
-                                    ? "bg-gray-600"
-                                    : actionValue === "C"
-                                        ? "bg-amber-600"
-                                        : "bg-red-600"
-                            }`}
-                    >
-                        {actionValue}
-                    </span>
-                </td>
+                {/* تم حذف عمود Action هنا */}
 
                 <td className="p-3 align-top">
                     <div className="text-gray-600 whitespace-pre-line text-sm">
@@ -359,7 +342,7 @@ const CPRTableRow = memo(
     },
 );
 
-// ==================== IRTableRow Component (خاص بـ IR) - مع عرض Action فقط ====================
+// ==================== IRTableRow Component (خاص بـ IR) - بدون عمود Action ====================
 const IRTableRow = memo(
     ({
         ir,
@@ -378,7 +361,6 @@ const IRTableRow = memo(
         const isLoading = isSaving[ir.irNo];
 
         const locationType = typesMap && ir.location ? typesMap[ir.location] : "IR";
-        const actionValue = ir.action || "";
 
         const handleInputChange = (e) => {
             const value = e.target.value;
@@ -403,7 +385,6 @@ const IRTableRow = memo(
                 ...ir,
                 typesMap: typesMap,
                 locationType: locationType,
-                action: actionValue,
             };
             onCopy(itemWithType);
         };
@@ -513,21 +494,7 @@ const IRTableRow = memo(
                     </div>
                 </td>
 
-                {/* عمود Action - عرض فقط (بدون تعديل) */}
-                <td className="p-3 align-top">
-                    <span
-                        className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-white ${actionValue === "A"
-                                ? "bg-green-600"
-                                : actionValue === "B"
-                                    ? "bg-blue-600"
-                                    : actionValue === "C"
-                                        ? "bg-amber-600"
-                                        : "bg-red-600"
-                            }`}
-                    >
-                        {actionValue}
-                    </span>
-                </td>
+                {/* تم حذف عمود Action هنا */}
 
                 <td className="p-3 align-top">
                     <div className="text-gray-600 whitespace-pre-line text-sm">
@@ -753,7 +720,7 @@ const ProjectSection = memo(
                                                         <th className="p-3 text-left">Description</th>
                                                         <th className="p-3 text-left">Type</th>
                                                         <th className="p-3 text-left">Attachments</th>
-                                                        <th className="p-3 text-left">Action</th>
+                                                        {/* تم حذف رأس Action */}
                                                         <th className="p-3 text-left">Sent At</th>
                                                         <th className="p-3 text-left">Status</th>
                                                         <th className="p-3 text-left">Actions</th>
@@ -846,7 +813,7 @@ const ProjectSection = memo(
                                                         <th className="p-3 text-left">Description</th>
                                                         <th className="p-3 text-left">Type</th>
                                                         <th className="p-3 text-left">Attachments</th>
-                                                        <th className="p-3 text-left">Action</th>
+                                                        {/* تم حذف رأس Action */}
                                                         <th className="p-3 text-left">Sent At</th>
                                                         <th className="p-3 text-left">Status</th>
                                                         <th className="p-3 text-left">Actions</th>
@@ -1002,7 +969,7 @@ export default function DcPage() {
                     tags: ir.tags || { engineer: [], sd: [] },
                     departmentAbbr: getDepartmentAbbr(ir.department),
                     projectTypesMap: typesMapData[ir.project] || {},
-                    action: ir.action || "A",
+                    // تم إزالة action من هنا (يمكن تركه في البيانات لكن لن يعرض)
                 }));
 
                 // Normalize Revisions
@@ -1032,7 +999,7 @@ export default function DcPage() {
                         rev.revisionType === "CPR_REVISION" || rev.isCPRRevision,
                     isIRRevision: rev.revisionType === "IR_REVISION" || rev.isIRRevision,
                     projectTypesMap: typesMapData[rev.project] || {},
-                    action: rev.action || "A",
+                    // تم إزالة action من هنا
                 }));
 
                 const merged = [...normalizedIrs, ...normalizedRevs];

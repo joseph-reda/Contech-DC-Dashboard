@@ -1,4 +1,4 @@
-// src/pages/DcArchive.jsx - النسخة النهائية مع دمج النشاط وإزالة الأعمدة
+// src/pages/DcArchive.jsx - النسخة النهائية مع دمج النشاط وإزالة الأعمدة + تحسين عرض Action الفارغ
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { API_URL } from "../config";
 import { useNavigate } from "react-router-dom";
@@ -188,6 +188,20 @@ const ArchiveTableRow = memo(({
     const isRestoringNow = isRestoring[item.irNo];
     const [isEditingAction, setIsEditingAction] = useState(false);
     
+    // دالة مساعدة لعرض Action (تعامل مع القيم الفارغة)
+    const getActionDisplay = (action) => {
+        if (!action || action === "") {
+            return { bg: "bg-gray-400", text: "⏳" };
+        }
+        switch(action) {
+            case '': return { bg: "bg-gray-600", text: "" };
+            case 'A': return { bg: "bg-green-600", text: "A" };
+            case 'B': return { bg: "bg-blue-600", text: "B" };
+            case 'C': return { bg: "bg-amber-600", text: "C" };
+            default: return { bg: "bg-red-600", text: action };
+        }
+    };
+    
     // دمج IrAttach و SdAttach في مصفوفة واحدة
     const allAttachments = [
         ...(item.tags?.engineer || []).map(tag => ({ type: 'ir', value: tag })),
@@ -307,7 +321,7 @@ const ArchiveTableRow = memo(({
                 </div>
             </td>
 
-            {/* Action Column - مع إمكانية التعديل */}
+            {/* Action Column - مع إمكانية التعديل وتحسين عرض القيم الفارغة */}
             <td className="p-4 align-top">
                 {isEditingAction ? (
                     <ActionEdit
@@ -317,14 +331,14 @@ const ArchiveTableRow = memo(({
                     />
                 ) : (
                     <div className="flex items-center gap-2">
-                        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-white ${
-                            actionValue === 'A' ? 'bg-green-600' :
-                            actionValue === 'B' ? 'bg-blue-600' :
-                            actionValue === 'C' ? 'bg-amber-600' :
-                            'bg-red-600'
-                        }`}>
-                            {actionValue}
-                        </span>
+                        {(() => {
+                            const { bg, text } = getActionDisplay(actionValue);
+                            return (
+                                <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-white ${bg}`}>
+                                    {text}
+                                </span>
+                            );
+                        })()}
                         <button
                             onClick={handleEditAction}
                             disabled={isUpdatingAction}
@@ -879,7 +893,7 @@ export default function DcArchive() {
         archivedBy: "all"
     });
     const [actionFilter, setActionFilter] = useState("all");
-    const actionOptions = ["A", "B", "C", "D"];
+    const actionOptions = ["", "A", "B", "C", "D"];
 
     // Refs
     const toastTimeoutRef = useRef(null);
@@ -1009,7 +1023,7 @@ export default function DcArchive() {
                 });
             }
             if (actionFilter !== "all") {
-                filtered = filtered.filter(item => (item.action || "A") === actionFilter);
+                filtered = filtered.filter(item => (item.action || "") === actionFilter);
             }
             if (debouncedSearch) {
                 const term = debouncedSearch.toLowerCase();
@@ -1044,7 +1058,7 @@ export default function DcArchive() {
                 isIRRevision: item.revisionType === "IR_REVISION" || item.isIRRevision,
                 departmentAbbr: getDepartmentAbbr(item.department),
                 tags: item.tags || { engineer: [], sd: [] },
-                action: item.action || "A",
+                action: item.action || "",
                 actionUpdatedBy: item.actionUpdatedBy || "",
                 actionUpdatedAt: item.actionUpdatedAt || ""
             }));

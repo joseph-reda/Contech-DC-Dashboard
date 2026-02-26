@@ -1,4 +1,4 @@
-// src/pages/EngineerRecords.jsx - النسخة النهائية تعرض كل البيانات مع فلاتر متقدمة
+// src/pages/EngineerRecords.jsx - النسخة النهائية مع إصلاح مشكلة whitespace
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
@@ -81,7 +81,7 @@ const StatsCards = memo(({ stats }) => (
   </div>
 ));
 
-// مكون Search And Filters - مع إضافة فلاتر التاريخ والمستخدم
+// مكون Search And Filters - مع إضافة فلتر Action
 const SearchAndFilters = memo(({ 
   searchTerm, 
   onSearchChange, 
@@ -94,11 +94,15 @@ const SearchAndFilters = memo(({
   dateRange,
   onDateRangeChange,
   selectedUser,
-  onUserChange
+  onUserChange,
+  actionFilter,
+  onActionChange,
+  actionOptions
 }) => {
   const hasActiveFilters = filters.project !== "all" || filters.type !== "all" || 
                           filters.status !== "all" || searchTerm || 
-                          dateRange !== "all" || selectedUser !== "all";
+                          dateRange !== "all" || selectedUser !== "all" ||
+                          actionFilter !== "all";
 
   return (
     <div className="bg-white rounded-xl shadow p-6 mb-6">
@@ -124,7 +128,7 @@ const SearchAndFilters = memo(({
         </button>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4 mt-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mt-4">
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1">
             Project
@@ -207,6 +211,22 @@ const SearchAndFilters = memo(({
             ))}
           </select>
         </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-1">
+            Action
+          </label>
+          <select
+            value={actionFilter}
+            onChange={(e) => onActionChange(e.target.value)}
+            className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+          >
+            <option value="all">All Actions</option>
+            {actionOptions.map(action => (
+              <option key={action} value={action}>Action {action}</option>
+            ))}
+          </select>
+        </div>
       </div>
 
       {/* Active Filters */}
@@ -238,6 +258,11 @@ const SearchAndFilters = memo(({
               {selectedUser !== "all" && (
                 <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs">
                   User: {selectedUser}
+                </span>
+              )}
+              {actionFilter !== "all" && (
+                <span className="px-2 py-1 bg-rose-100 text-rose-800 rounded text-xs">
+                  Action: {actionFilter}
                 </span>
               )}
               {searchTerm && (
@@ -289,7 +314,7 @@ const EmptyState = memo(({ isFiltered, onReset, onNavigate, department }) => (
   </div>
 ));
 
-// مكون صف الجدول - مع دمج IrAttach و SdAttach
+// مكون صف الجدول - مع إضافة عمود Action
 const RecordRow = memo(({ item, getStatusColor, getTypeColor, getStatusText, getItemTypeText }) => {
   const statusColor = getStatusColor(item);
   const typeColor = getTypeColor(item);
@@ -301,6 +326,9 @@ const RecordRow = memo(({ item, getStatusColor, getTypeColor, getStatusText, get
     ...(item.irAttach || []).map(tag => ({ type: 'ir', value: tag })),
     ...(item.sdAttach || []).map(tag => ({ type: 'sd', value: tag }))
   ];
+
+  // قيمة Action (افتراضي "A" إذا لم توجد)
+  const actionValue = item.action || "";
 
   return (
     <tr className="border-b hover:bg-gray-50 transition-colors">
@@ -344,6 +372,19 @@ const RecordRow = memo(({ item, getStatusColor, getTypeColor, getStatusText, get
       
       <td className="p-4">
         <div className="font-medium text-gray-800">{item.project}</div>
+      </td>
+
+      {/* عمود Action الجديد */}
+      <td className="p-4">
+        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-white ${
+          actionValue === "" ? 'bg-gray-600' :
+          actionValue === 'A' ? 'bg-green-600' :
+          actionValue === 'B' ? 'bg-blue-600' :
+          actionValue === 'C' ? 'bg-amber-600' :
+          'bg-red-600'
+        }`}>
+          {actionValue}
+        </span>
       </td>
       
       {/* عمود Attachments الموحد */}
@@ -444,10 +485,12 @@ const RecordsTable = memo(({
         <table className="w-full">
           <thead>
             <tr className="bg-gray-50 text-gray-700 border-b">
+              { /* استخدام التعليقات لمنع أي مسافة بيضاء بين العناصر */ }
               <th className="p-4 text-left font-semibold">ID / Number</th>
               <th className="p-4 text-left font-semibold">Description</th>
               <th className="p-4 text-left font-semibold">Type / User</th>
               <th className="p-4 text-left font-semibold">Project</th>
+              <th className="p-4 text-left font-semibold">Action</th>
               <th className="p-4 text-left font-semibold">Attachments</th>
               <th className="p-4 text-left font-semibold">Date & Time</th>
               <th className="p-4 text-left font-semibold">Status</th>
@@ -499,7 +542,7 @@ export default function EngineerRecords() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState({ show: false, message: "", type: "" });
   
-  // Filter states - موسعة
+  // Filter states - موسعة مع إضافة actionFilter
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filters, setFilters] = useState({
@@ -509,10 +552,12 @@ export default function EngineerRecords() {
   });
   const [dateRange, setDateRange] = useState("all");
   const [selectedUser, setSelectedUser] = useState("all");
+  const [actionFilter, setActionFilter] = useState("all");
   
   // Filter options
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
+  const [actionOptions, setActionOptions] = useState(["","A", "B", "C", "D"]);
   
   // Statistics
   const [stats, setStats] = useState({
@@ -565,12 +610,12 @@ export default function EngineerRecords() {
     };
   }, [searchTerm]);
 
-  // Load ALL records when filters change
+  // Load ALL records when filters change (including actionFilter)
   useEffect(() => {
     if (department) {
       loadAllRecords();
     }
-  }, [department, filters, debouncedSearch, dateRange, selectedUser]);
+  }, [department, filters, debouncedSearch, dateRange, selectedUser, actionFilter]);
 
   // ===================== Toast Helper =====================
   const showToast = useCallback((message, type = "success") => {
@@ -595,7 +640,7 @@ export default function EngineerRecords() {
     }
   };
 
-  // ===================== Load ALL Records (Active + Archived) =====================
+  // ===================== Load ALL Records (Active + Archived) from unified endpoints =====================
   const loadAllRecords = async () => {
     if (!department) return;
     
@@ -605,120 +650,62 @@ export default function EngineerRecords() {
     try {
       console.log("📡 Loading all records for department:", department);
       
-      // جلب جميع البيانات من كل المصادر
-      const [irsRes, revsRes, archiveIrsRes, archiveRevsRes] = await Promise.all([
-        fetch(`${API_URL}/irs`),
-        fetch(`${API_URL}/revs`),
-        fetch(`${API_URL}/archive/engineer?user=${user?.username || ''}`),
-        fetch(`${API_URL}/archive/dc`)
+      const [irsRes, revsRes] = await Promise.all([
+        fetch(`${API_URL}/irs/all`),
+        fetch(`${API_URL}/revs/all`)
       ]);
 
-      // معالجة IRs النشطة
-      let activeIRs = [];
+      let irsList = [];
       if (irsRes.ok) {
         const data = await irsRes.json();
-        activeIRs = (data.irs || []).filter(ir => 
+        irsList = (data.irs || []).filter(ir => 
           ir.department === department || getDepartmentAbbr(ir.department) === departmentAbbr
         );
-        console.log(`✅ Loaded ${activeIRs.length} active IRs`);
+        console.log(`✅ Loaded ${irsList.length} IRs (including archived)`);
       }
 
-      // معالجة Revisions النشطة
-      let activeRevs = [];
+      let revsList = [];
       if (revsRes.ok) {
         const data = await revsRes.json();
-        activeRevs = (data.revs || []).filter(rev => 
+        revsList = (data.revs || []).filter(rev => 
           rev.department === department || getDepartmentAbbr(rev.department) === departmentAbbr
         );
-        console.log(`✅ Loaded ${activeRevs.length} active Revisions`);
+        console.log(`✅ Loaded ${revsList.length} Revisions (including archived)`);
       }
 
-      // معالجة Engineer Archive
-      let engineerArchive = [];
-      if (archiveIrsRes.ok) {
-        const data = await archiveIrsRes.json();
-        engineerArchive = (data.archive || []).filter(item => 
-          item.department === department || getDepartmentAbbr(item.department) === departmentAbbr
-        );
-        console.log(`✅ Loaded ${engineerArchive.length} engineer archived items`);
-      }
-
-      // معالجة DC Archive
-      let dcArchive = [];
-      if (archiveRevsRes.ok) {
-        const data = await archiveRevsRes.json();
-        dcArchive = (data.archive || []).filter(item => 
-          item.department === department || getDepartmentAbbr(item.department) === departmentAbbr
-        );
-        console.log(`✅ Loaded ${dcArchive.length} DC archived items`);
-      }
-
-      // دمج جميع البيانات
       const allRecords = [
-        // IRs نشطة
-        ...activeIRs.map(ir => ({
+        ...irsList.map(ir => ({
           ...ir,
           isRevision: false,
-          source: 'active',
+          source: 'irs',
           displayNumber: ir.irNo,
           itemType: ir.requestType === 'CPR' ? 'CPR' : 'IR',
-          formattedDate: formatDate(ir.sentAt || ir.createdAt),
-          shortDate: formatShortDate(ir.sentAt || ir.createdAt),
+          formattedDate: formatDate(ir.sentAt || ir.createdAt || ir.archivedAt),
+          shortDate: formatShortDate(ir.sentAt || ir.createdAt || ir.archivedAt),
           irAttach: ir.tags?.engineer || [],
           sdAttach: ir.tags?.sd || [],
           user: ir.user || 'Unknown',
-          date: new Date(ir.sentAt || ir.createdAt || 0)
+          date: new Date(ir.sentAt || ir.createdAt || ir.archivedAt || 0),
+          action: ir.action || ''
         })),
-        
-        // Revisions نشطة
-        ...activeRevs.map(rev => ({
+        ...revsList.map(rev => ({
           ...rev,
           isRevision: true,
-          source: 'active',
+          source: 'revs',
           displayNumber: rev.displayNumber || rev.revNo || rev.irNo,
           itemType: 'REV',
-          formattedDate: formatDate(rev.sentAt || rev.createdAt),
-          shortDate: formatShortDate(rev.sentAt || rev.createdAt),
+          formattedDate: formatDate(rev.sentAt || rev.createdAt || rev.archivedAt),
+          shortDate: formatShortDate(rev.sentAt || rev.createdAt || rev.archivedAt),
           irAttach: rev.tags?.engineer || [],
           sdAttach: rev.tags?.sd || [],
           user: rev.user || 'Unknown',
-          date: new Date(rev.sentAt || rev.createdAt || 0)
-        })),
-        
-        // من أرشيف المهندس
-        ...engineerArchive.map(item => ({
-          ...item,
-          isArchived: true,
-          source: 'engineer_archive',
-          displayNumber: item.irNo || item.revNo,
-          itemType: item.isRevision ? 'REV' : (item.requestType === 'CPR' ? 'CPR' : 'IR'),
-          formattedDate: formatDate(item.archivedAt || item.sentAt),
-          shortDate: formatShortDate(item.archivedAt || item.sentAt),
-          irAttach: item.tags?.engineer || [],
-          sdAttach: item.tags?.sd || [],
-          user: item.user || 'Unknown',
-          date: new Date(item.archivedAt || item.sentAt || 0)
-        })),
-        
-        // من أرشيف DC
-        ...dcArchive.map(item => ({
-          ...item,
-          isArchived: true,
-          source: 'dc_archive',
-          displayNumber: item.irNo || item.revNo,
-          itemType: item.isRevision ? 'REV' : (item.requestType === 'CPR' ? 'CPR' : 'IR'),
-          formattedDate: formatDate(item.archivedAt || item.sentAt),
-          shortDate: formatShortDate(item.archivedAt || item.sentAt),
-          irAttach: item.tags?.engineer || [],
-          sdAttach: item.tags?.sd || [],
-          user: item.user || 'Unknown',
-          date: new Date(item.archivedAt || item.sentAt || 0)
+          date: new Date(rev.sentAt || rev.createdAt || rev.archivedAt || 0),
+          action: rev.action || ''
         }))
       ];
 
       console.log(`📊 Total records before deduplication: ${allRecords.length}`);
 
-      // إزالة التكرارات (بناءً على الرقم)
       const uniqueRecords = [];
       const seenIds = new Set();
       
@@ -732,26 +719,22 @@ export default function EngineerRecords() {
 
       console.log(`📊 Total unique records: ${uniqueRecords.length}`);
 
-      // ترتيب حسب التاريخ (الأحدث أولاً)
       uniqueRecords.sort((a, b) => b.date - a.date);
 
       setRecords(uniqueRecords);
       
-      // حساب الإحصائيات
       calculateStats(uniqueRecords);
       
-      // جمع المشاريع الفريدة للفلتر
       const uniqueProjects = [...new Set(uniqueRecords.map(r => r.project).filter(Boolean))].sort();
       setProjects(uniqueProjects);
       
-      // جمع المستخدمين الفريدين للفلتر
       const uniqueUsers = [...new Set(uniqueRecords.map(r => r.user).filter(Boolean))].map(username => ({
         username,
         fullname: username
       })).sort((a, b) => a.username.localeCompare(b.username));
       setUsers(uniqueUsers);
       
-      showToast(`✅ Loaded ${uniqueRecords.length} records (${engineerArchive.length + dcArchive.length} archived)`, "success");
+      showToast(`✅ Loaded ${uniqueRecords.length} records (${uniqueRecords.filter(r => r.isArchived).length} archived)`, "success");
       
     } catch (err) {
       console.error("Error loading records:", err);
@@ -782,7 +765,7 @@ export default function EngineerRecords() {
     });
   };
 
-  // ===================== Filter Logic مع التاريخ والمستخدم =====================
+  // ===================== Filter Logic مع Action =====================
   const filteredRecords = useCallback(() => {
     if (!records || records.length === 0) {
       return [];
@@ -798,30 +781,26 @@ export default function EngineerRecords() {
     yearAgo.setFullYear(today.getFullYear() - 1);
     
     return records.filter(record => {
-      // Filter by project
       if (filters.project !== "all" && record.project !== filters.project) return false;
 
-      // Filter by type
       if (filters.type !== "all") {
         if (filters.type === "ir" && (record.isRevision || record.requestType === "CPR")) return false;
         if (filters.type === "cpr" && (!record.isCPR && record.requestType !== "CPR")) return false;
         if (filters.type === "revision" && !record.isRevision) return false;
       }
 
-      // Filter by status
       if (filters.status !== "all") {
         if (filters.status === "pending" && (record.isDone || record.isArchived)) return false;
         if (filters.status === "completed" && (!record.isDone || record.isArchived)) return false;
         if (filters.status === "archived" && !record.isArchived) return false;
       }
 
-      // Filter by user
       if (selectedUser !== "all" && record.user !== selectedUser) return false;
 
-      // Filter by date range
+      if (actionFilter !== "all" && record.action !== actionFilter) return false;
+
       if (dateRange !== "all") {
         const recordDate = record.date;
-        
         switch (dateRange) {
           case "today":
             if (recordDate < today) return false;
@@ -838,7 +817,6 @@ export default function EngineerRecords() {
         }
       }
 
-      // Search term
       if (debouncedSearch && debouncedSearch.trim() !== "") {
         const term = debouncedSearch.toLowerCase();
         const displayNumber = (record.displayNumber || "").toLowerCase();
@@ -858,7 +836,7 @@ export default function EngineerRecords() {
 
       return true;
     });
-  }, [records, filters, debouncedSearch, dateRange, selectedUser]);
+  }, [records, filters, debouncedSearch, dateRange, selectedUser, actionFilter]);
 
   // ===================== Style Helper Functions =====================
   const getStatusColor = useCallback((item) => {
@@ -905,6 +883,10 @@ export default function EngineerRecords() {
     setSelectedUser(value);
   }, []);
 
+  const handleActionChange = useCallback((value) => {
+    setActionFilter(value);
+  }, []);
+
   const handleResetFilters = useCallback(() => {
     setFilters({
       project: "all",
@@ -913,6 +895,7 @@ export default function EngineerRecords() {
     });
     setDateRange("all");
     setSelectedUser("all");
+    setActionFilter("all");
     setSearchTerm("");
     showToast("Filters cleared", "info");
   }, [showToast]);
@@ -1019,6 +1002,9 @@ export default function EngineerRecords() {
           onDateRangeChange={handleDateRangeChange}
           selectedUser={selectedUser}
           onUserChange={handleUserChange}
+          actionFilter={actionFilter}
+          onActionChange={handleActionChange}
+          actionOptions={actionOptions}
         />
         
         <RecordsTable

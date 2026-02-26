@@ -1,4 +1,4 @@
-// src/pages/EngineerPage.jsx - النسخة المبسطة
+// src/pages/EngineerPage.jsx - النسخة المعدلة (Floor اختياري)
 import { useEffect, useState, useCallback } from "react";
 import { useSearchParams, useNavigate } from "react-router-dom";
 import SearchableInput from "../components/SearchableInput";
@@ -216,10 +216,8 @@ export default function EngineerPage() {
     // ===================== Generate Final Description =====================
     useEffect(() => {
         if (requestType === "CPR") {
-            // CPR description - بدون concrete grade
             const desc = generalDesc || "Concrete Pouring";
             const location = selectedLocation ? ` at ${selectedLocation}` : "";
-            
             const finalDesc = `Concrete Pouring Request: ${desc}${location}`;
             
             if (!isEditingFinalDesc) {
@@ -227,7 +225,6 @@ export default function EngineerPage() {
                 setOriginalFinalDesc(finalDesc);
             }
         } else {
-            // IR description
             const desc = generalDesc || "Inspection";
             const floor = selectedFloor ? ` for ${selectedFloor}` : "";
             const location = selectedLocation ? ` at ${selectedLocation}` : "";
@@ -250,6 +247,7 @@ export default function EngineerPage() {
 
     const handleSaveFinalDesc = () => {
         setIsEditingFinalDesc(false);
+        // لا نقوم بتغيير finalDescription هنا، بل نتركها كما هي (القيمة المعدلة)
     };
 
     const handleCancelEditFinalDesc = () => {
@@ -323,10 +321,7 @@ export default function EngineerPage() {
             return;
         }
 
-        if (requestType === "IR" && !selectedFloor) {
-            showToastMessage("Please select a floor for IR requests", "error");
-            return;
-        }
+        // ✅ إزالة التحقق الإلزامي من Floor
 
         if (!finalDescription.trim()) {
             showToastMessage("Please enter a final description", "error");
@@ -335,7 +330,6 @@ export default function EngineerPage() {
 
         setSaving(true);
 
-        // Build payload - بدون concrete grade
         const payload = {
             project: selectedProject,
             location: selectedLocation,
@@ -350,9 +344,9 @@ export default function EngineerPage() {
             isEdited: isEditingFinalDesc
         };
 
-        // إضافة floor فقط لـ IR
-        if (requestType !== "CPR") {
-            payload.floor = selectedFloor || "";
+        // إضافة floor إذا كان موجوداً
+        if (requestType !== "CPR" && selectedFloor) {
+            payload.floor = selectedFloor;
         }
 
         console.log("📤 Submitting payload:", payload);
@@ -610,7 +604,6 @@ export default function EngineerPage() {
                             />
 
                             {requestType === "CPR" ? (
-                                // CPR: فقط Pouring Element
                                 <SearchableInput
                                     label="Pouring Element *"
                                     options={baseDescriptions}
@@ -620,7 +613,6 @@ export default function EngineerPage() {
                                     disabled={!selectedProject}
                                 />
                             ) : (
-                                // IR: Work Description + Floor
                                 <>
                                     <SearchableInput
                                         label="Work Description *"
@@ -632,11 +624,11 @@ export default function EngineerPage() {
                                     />
 
                                     <SearchableInput
-                                        label="Floor *"
+                                        label="Floor (optional)"
                                         options={floors}
                                         value={selectedFloor}
                                         onChange={setSelectedFloor}
-                                        placeholder="Select floor..."
+                                        placeholder="Select floor (optional)..."
                                         disabled={!selectedProject}
                                     />
                                 </>
@@ -663,7 +655,7 @@ export default function EngineerPage() {
                         {selectedProject && <NextNumberPreview />}
                     </div>
 
-                    {/* Tags Section */}
+                    {/* Tags Section (بدون تغيير) */}
                     <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
                         <h2 className="text-xl font-bold text-gray-800 mb-6 flex items-center gap-2">
                             <span className="w-1.5 h-8 bg-purple-600 rounded-full"></span>
@@ -753,7 +745,7 @@ export default function EngineerPage() {
                         </div>
                     </div>
 
-                    {/* Final Description */}
+                    {/* Final Description (بدون تغيير) */}
                     <div className="bg-white rounded-2xl shadow-lg border border-gray-200 p-6">
                         <div className="flex justify-between items-center mb-4">
                             <h2 className={`text-xl font-bold flex items-center gap-2 ${
@@ -830,13 +822,9 @@ export default function EngineerPage() {
                     {/* Submit Button */}
                     <button
                         onClick={handleSave}
-                        disabled={saving || !selectedProject || !selectedLocation || !generalDesc || 
-                                (requestType === "IR" && !selectedFloor) || 
-                                !finalDescription.trim()}
+                        disabled={saving || !selectedProject || !selectedLocation || !generalDesc || !finalDescription.trim()}
                         className={`w-full py-5 rounded-xl text-white font-bold text-lg shadow-xl transition-all transform hover:-translate-y-1 ${
-                            saving || !selectedProject || !selectedLocation || !generalDesc || 
-                            (requestType === "IR" && !selectedFloor) || 
-                            !finalDescription.trim()
+                            saving || !selectedProject || !selectedLocation || !generalDesc || !finalDescription.trim()
                                 ? "bg-gray-400 cursor-not-allowed"
                                 : requestType === "CPR"
                                     ? "bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700"
@@ -857,7 +845,7 @@ export default function EngineerPage() {
                 </div>
             </div>
 
-            {/* Revision Modal */}
+            {/* Revision Modal (بدون تغيير) */}
             {showRevModal && (
                 <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] p-4">
                     <div className="bg-white w-full max-w-lg rounded-2xl shadow-2xl overflow-hidden animate-in fade-in zoom-in duration-200">

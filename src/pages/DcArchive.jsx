@@ -1,4 +1,5 @@
-// src/pages/DcArchive.jsx - النسخة النهائية مع دمج النشاط وإزالة الأعمدة + تحسين عرض Action الفارغ
+// src/pages/DcArchive.jsx - النسخة النهائية المستقرة
+// مع ضمان عرض جميع البيانات المؤرشفة بشكل صحيح ومعالجة القيم المفقودة
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { API_URL } from "../config";
 import { useNavigate } from "react-router-dom";
@@ -194,7 +195,6 @@ const ArchiveTableRow = memo(({
             return { bg: "bg-gray-400", text: "⏳" };
         }
         switch(action) {
-            case '': return { bg: "bg-gray-600", text: "" };
             case 'A': return { bg: "bg-green-600", text: "A" };
             case 'B': return { bg: "bg-blue-600", text: "B" };
             case 'C': return { bg: "bg-amber-600", text: "C" };
@@ -301,9 +301,9 @@ const ArchiveTableRow = memo(({
                     {item.floor && <span>🏢 {item.floor}</span>}
                 </div>
                 {/* تاريخ الأرشفة ضمن الوصف */}
-                {item.archivedDate && (
+                {item.archivedAt && (
                     <div className="text-xs text-gray-400 mt-1">
-                        📁 Archived: {formatShortDate(item.archivedDate)}
+                        📁 Archived: {formatShortDate(item.archivedAt)}
                     </div>
                 )}
             </td>
@@ -517,7 +517,7 @@ const ProjectSection = memo(({
                     <tbody>
                         {items.map((item, index) => (
                             <ArchiveTableRow
-                                key={`${item.irNo}-${index}`}
+                                key={`${item.irNo || item.revNo}-${index}`}
                                 item={item}
                                 isDeleting={isDeleting}
                                 isRestoring={isRestoring}
@@ -982,11 +982,16 @@ export default function DcArchive() {
                 ...(revsData.revs || []).map(item => ({ ...item, isRevision: true }))
             ];
 
+            console.log('📦 Total items fetched:', allItems.length);
+            console.log('📦 Archived items count:', allItems.filter(i => i.isArchived === true).length);
+
             // تطبيق الفلاتر الأساسية (isArchived == true)
             let filtered = allItems.filter(item => item.isArchived === true);
+            console.log('✅ after isArchived filter:', filtered.length);
 
             if (filters.project !== "all") {
                 filtered = filtered.filter(item => item.project === filters.project);
+                console.log('📌 after project filter:', filtered.length);
             }
             if (filters.type !== "all") {
                 filtered = filtered.filter(item => {
@@ -995,6 +1000,7 @@ export default function DcArchive() {
                     if (filters.type === "revision") return item.isRevision;
                     return true;
                 });
+                console.log('🔤 after type filter:', filtered.length);
             }
             if (filters.status !== "all") {
                 filtered = filtered.filter(item => {
@@ -1002,12 +1008,15 @@ export default function DcArchive() {
                     if (filters.status === "completed") return item.isDone;
                     return true;
                 });
+                console.log('⚡ after status filter:', filtered.length);
             }
             if (filters.department !== "all") {
                 filtered = filtered.filter(item => getDepartmentAbbr(item.department) === filters.department);
+                console.log('🏢 after department filter:', filtered.length);
             }
             if (filters.archivedBy !== "all") {
                 filtered = filtered.filter(item => item.archivedBy === filters.archivedBy);
+                console.log('👤 after archivedBy filter:', filtered.length);
             }
             if (filters.dateRange !== "all") {
                 const now = new Date();
@@ -1016,14 +1025,20 @@ export default function DcArchive() {
                 const monthAgo = new Date(today); monthAgo.setMonth(today.getMonth() - 1);
                 filtered = filtered.filter(item => {
                     const date = new Date(item.archivedAt || item.sentAt);
+                    if (isNaN(date.getTime())) return true; // تجاهل العناصر ذات التاريخ غير الصالح
                     if (filters.dateRange === "today") return date >= today;
                     if (filters.dateRange === "week") return date >= weekAgo;
                     if (filters.dateRange === "month") return date >= monthAgo;
                     return true;
                 });
+                console.log('📅 after date filter:', filtered.length);
             }
             if (actionFilter !== "all") {
-                filtered = filtered.filter(item => (item.action || "") === actionFilter);
+                filtered = filtered.filter(item => {
+                    const val = item.action || "";
+                    return val === actionFilter;
+                });
+                console.log('🎯 after action filter:', filtered.length);
             }
             if (debouncedSearch) {
                 const term = debouncedSearch.toLowerCase();
@@ -1033,20 +1048,29 @@ export default function DcArchive() {
                     (item.project?.toLowerCase().includes(term)) ||
                     (item.user?.toLowerCase().includes(term))
                 );
+                console.log('🔎 after search filter:', filtered.length);
             }
 
-            // ترتيب حسب التاريخ
-            filtered.sort((a, b) => new Date(b.archivedAt || b.sentAt) - new Date(a.archivedAt || a.sentAt));
+            // ترتيب حسب التاريخ (الأحدث أولاً)
+            filtered.sort((a, b) => {
+                const dateA = new Date(a.archivedAt || a.sentAt);
+                const dateB = new Date(b.archivedAt || b.sentAt);
+                if (isNaN(dateA.getTime())) return 1;
+                if (isNaN(dateB.getTime())) return -1;
+                return dateB - dateA;
+            });
 
             // تطبيق Pagination محلي
             const start = (page - 1) * pageSize;
             const paginated = filtered.slice(0, start + pageSize);
             const hasMoreData = filtered.length > start + pageSize;
 
+            // تنسيق البيانات وإضافة القيم الافتراضية للحقول المفقودة
             const formatted = paginated.map(item => ({
                 ...item,
                 irNo: item.isRevision ? item.revNo || item.irNo : item.irNo,
-                desc: item.isRevision ? item.revNote || item.desc : item.desc,
+                revNo: item.revNo || (item.isRevision ? item.irNo : undefined),
+                desc: item.desc || item.revNote || "",
                 archivedDate: item.archivedAt || "Unknown",
                 requestType: item.requestType || (item.isRevision ? "REVISION" : "IR"),
                 revisionType: item.revisionType || "IR_REVISION",
@@ -1054,13 +1078,20 @@ export default function DcArchive() {
                 downloadedBy: item.downloadedBy || "",
                 downloadedAt: item.downloadedAt || "",
                 userRevNumber: item.userRevNumber || item.revText,
-                isCPRRevision: item.revisionType === "CPR_REVISION" || item.isCPRRevision,
-                isIRRevision: item.revisionType === "IR_REVISION" || item.isIRRevision,
+                isCPRRevision: item.revisionType === "CPR_REVISION" || item.isCPRRevision || false,
+                isIRRevision: item.revisionType === "IR_REVISION" || item.isIRRevision || false,
                 departmentAbbr: getDepartmentAbbr(item.department),
                 tags: item.tags || { engineer: [], sd: [] },
                 action: item.action || "",
                 actionUpdatedBy: item.actionUpdatedBy || "",
-                actionUpdatedAt: item.actionUpdatedAt || ""
+                actionUpdatedAt: item.actionUpdatedAt || "",
+                isDone: item.isDone || false,
+                isArchived: item.isArchived || false,
+                user: item.user || "Unknown",
+                location: item.location || "",
+                floor: item.floor || "",
+                archivedBy: item.archivedBy || "",
+                project: item.project || "Unknown"
             }));
 
             if (reset) {
@@ -1073,6 +1104,8 @@ export default function DcArchive() {
             if (!reset) {
                 setPage(prev => prev + 1);
             }
+
+            console.log('✅ Final formatted items:', formatted.length);
         } catch (err) {
             console.error("Error loading archive:", err);
             showToastMessage("❌ Failed to load archive", "error");
@@ -1104,7 +1137,7 @@ export default function DcArchive() {
                 observer.unobserve(lastItemRef.current);
             }
         };
-    }, [loading, loadingMore, hasMore, items.length]);
+    }, [loading, loadingMore, hasMore, loadArchive]);
 
     // ===================== Style Helper Functions =====================
     const getStatusClass = useCallback((item) => {
@@ -1197,7 +1230,6 @@ export default function DcArchive() {
         }
     }, [showToastMessage]);
 
-    // دالة تحديث Action باستخدام نقطة النهاية الجديدة مع إرسال اسم المستخدم
     const handleUpdateAction = useCallback(async (item, newAction) => {
         setUpdatingAction(prev => ({ ...prev, [item.irNo]: true }));
         try {
@@ -1217,7 +1249,6 @@ export default function DcArchive() {
             const data = await res.json();
             if (!res.ok) throw new Error(data.error || "Failed to update action");
             
-            // تحديث الحالة المحلية مع إضافة معلومات التحديث
             setItems(prev => prev.map(i => 
                 i.irNo === item.irNo 
                     ? { 

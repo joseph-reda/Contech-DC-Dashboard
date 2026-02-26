@@ -85,7 +85,7 @@ export default function Navbar() {
                                 </svg>
                             </button>
                             <Link to={user.role === "admin" ? "/admin" : user.role === "dc" ? "/dc" : "/engineer"}>
-                                <img src={logo} alt="Contech" className="h-16 w-35  rounded" />
+                                <img src={logo} alt="Contech" className="h-[70px] w-[120px] rounded" />
                             </Link>
                         </div>
 

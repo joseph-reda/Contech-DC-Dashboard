@@ -1,4 +1,4 @@
-// src/pages/EngineerRecords.jsx - النسخة النهائية مع دعم uniqueId والإزالة الصحيحة للتكرارات
+// src/pages/EngineerRecords.jsx - نسخة نهائية بدون عناصر مؤرشفة وبدون زر أرشفة
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
@@ -45,15 +45,15 @@ const LoadingScreen = memo(() => (
   <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
     <div className="text-center">
       <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-      <p className="text-gray-600 font-medium">Loading All Records...</p>
+      <p className="text-gray-600 font-medium">Loading Records...</p>
       <p className="text-gray-400 text-sm mt-2">Please wait a moment</p>
     </div>
   </div>
 ));
 
-// مكون Stats Cards
+// مكون Stats Cards (بدون archived)
 const StatsCards = memo(({ stats }) => (
-  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-7 gap-4 mb-6">
+  <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
     <div className="bg-white rounded-xl shadow p-4 text-center">
       <div className="text-2xl font-bold text-gray-800">{stats.total}</div>
       <div className="text-sm text-gray-500">Total</div>
@@ -63,14 +63,8 @@ const StatsCards = memo(({ stats }) => (
       <div className="text-sm text-gray-500">Pending</div>
     </div>
     <div className="bg-white rounded-xl shadow p-4 text-center">
-      <div className="text-2xl font-bold text-emerald-600">
-        {stats.completed}
-      </div>
+      <div className="text-2xl font-bold text-emerald-600">{stats.completed}</div>
       <div className="text-sm text-gray-500">Completed</div>
-    </div>
-    <div className="bg-white rounded-xl shadow p-4 text-center">
-      <div className="text-2xl font-bold text-gray-600">{stats.archived}</div>
-      <div className="text-sm text-gray-500">Archived</div>
     </div>
     <div className="bg-white rounded-xl shadow p-4 text-center">
       <div className="text-2xl font-bold text-blue-600">{stats.ir}</div>
@@ -81,15 +75,13 @@ const StatsCards = memo(({ stats }) => (
       <div className="text-sm text-gray-500">CPR</div>
     </div>
     <div className="bg-white rounded-xl shadow p-4 text-center">
-      <div className="text-2xl font-bold text-purple-600">
-        {stats.revisions}
-      </div>
+      <div className="text-2xl font-bold text-purple-600">{stats.revisions}</div>
       <div className="text-sm text-gray-500">Revisions</div>
     </div>
   </div>
 ));
 
-// مكون Search And Filters - مع إضافة فلتر Action
+// مكون Search And Filters (بدون خيار Archived في حالة Status)
 const SearchAndFilters = memo(
   ({
     searchTerm,
@@ -122,7 +114,7 @@ const SearchAndFilters = memo(
         <div className="flex flex-col md:flex-row gap-4 items-end">
           <div className="flex-1">
             <label className="block text-sm font-medium text-gray-700 mb-1">
-              🔍 Search All Records
+              🔍 Search Records
             </label>
             <input
               type="text"
@@ -188,7 +180,6 @@ const SearchAndFilters = memo(
               <option value="all">All Status</option>
               <option value="pending">Pending</option>
               <option value="completed">Completed</option>
-              <option value="archived">Archived</option>
             </select>
           </div>
 
@@ -332,16 +323,9 @@ const EmptyState = memo(({ isFiltered, onReset, onNavigate, department }) => (
   </div>
 ));
 
-// مكون صف الجدول - مع إضافة عمود Action وأزرار Archive/Restore
+// مكون صف الجدول - بدون زر أرشيف
 const RecordRow = memo(
-  ({
-    item,
-    getStatusColor,
-    getTypeColor,
-    getStatusText,
-    getItemTypeText,
-    onArchive,
-  }) => {
+  ({ item, getStatusColor, getTypeColor, getStatusText, getItemTypeText }) => {
     const statusColor = getStatusColor(item);
     const typeColor = getTypeColor(item);
     const statusText = getStatusText(item);
@@ -389,11 +373,6 @@ const RecordRow = memo(
             {item.isRevision && (
               <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded">
                 Revision
-              </span>
-            )}
-            {item.isArchived && (
-              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-800 rounded">
-                📁 Archived
               </span>
             )}
           </div>
@@ -463,11 +442,6 @@ const RecordRow = memo(
           <div className="text-gray-600 whitespace-pre-line">
             {item.formattedDate}
           </div>
-          {item.archivedAt && (
-            <div className="text-xs text-gray-500 mt-1">
-              📁 Archived: {formatShortDate(item.archivedAt)}
-            </div>
-          )}
         </td>
 
         <td className="p-4">
@@ -475,7 +449,7 @@ const RecordRow = memo(
             <span
               className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${statusColor}`}
             >
-              {item.isArchived ? "📁" : item.isDone ? "✅" : "⏳"} {statusText}
+              {item.isDone ? "✅" : "⏳"} {statusText}
             </span>
 
             {item.downloadedBy && (
@@ -484,16 +458,6 @@ const RecordRow = memo(
                 {item.downloadedBy}
               </div>
             )}
-
-            {/* أزرار Archive / Restore */}
-            <div className="flex gap-2 mt-2">
-              <button
-                onClick={() => onArchive(item)}
-                className="px-3 py-1 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded text-xs font-medium transition"
-              >
-                📁 Archive
-              </button>
-            </div>
           </div>
         </td>
       </tr>
@@ -512,7 +476,6 @@ const RecordsTable = memo(
     getTypeColor,
     getStatusText,
     getItemTypeText,
-    onArchive,
     onResetFilters,
     onNavigate,
   }) => {
@@ -538,11 +501,6 @@ const RecordsTable = memo(
               <p className="text-blue-100">
                 Showing {filteredRecords.length} of {records.length} total
                 records
-                {records.filter((r) => r.isArchived).length > 0 && (
-                  <span className="ml-2 text-blue-200">
-                    ({records.filter((r) => r.isArchived).length} archived)
-                  </span>
-                )}
               </p>
             </div>
             <div className="text-sm bg-white/20 px-3 py-1 rounded-full">
@@ -578,7 +536,6 @@ const RecordsTable = memo(
                   getTypeColor={getTypeColor}
                   getStatusText={getStatusText}
                   getItemTypeText={getItemTypeText}
-                  onArchive={onArchive}
                 />
               ))}
             </tbody>
@@ -623,7 +580,7 @@ export default function EngineerRecords() {
   const [error, setError] = useState("");
   const [toast, setToast] = useState({ show: false, message: "", type: "" });
 
-  // Filter states - موسعة مع إضافة actionFilter
+  // Filter states
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
   const [filters, setFilters] = useState({
@@ -640,12 +597,11 @@ export default function EngineerRecords() {
   const [users, setUsers] = useState([]);
   const [actionOptions, setActionOptions] = useState(["", "A", "B", "C", "D"]);
 
-  // Statistics
+  // Statistics (بدون archived)
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
     completed: 0,
-    archived: 0,
     revisions: 0,
     cpr: 0,
     ir: 0,
@@ -691,19 +647,12 @@ export default function EngineerRecords() {
     };
   }, [searchTerm]);
 
-  // Load ALL records when filters change (including actionFilter)
+  // Load records when filters change
   useEffect(() => {
     if (department) {
-      loadAllRecords();
+      loadRecords();
     }
-  }, [
-    department,
-    filters,
-    debouncedSearch,
-    dateRange,
-    selectedUser,
-    actionFilter,
-  ]);
+  }, [department, filters, debouncedSearch, dateRange, selectedUser, actionFilter]);
 
   // ===================== Toast Helper =====================
   const showToast = useCallback((message, type = "success") => {
@@ -730,19 +679,19 @@ export default function EngineerRecords() {
     }
   };
 
-  // ===================== Load ALL Records (Active + Archived) from unified endpoints =====================
-  const loadAllRecords = async () => {
+  // ===================== Load Records (غير مؤرشفة فقط) =====================
+  const loadRecords = async () => {
     if (!department) return;
 
     setLoading(true);
     setError("");
 
     try {
-      console.log("📡 Loading all records for department:", department);
+      console.log("📡 Loading records for department:", department);
 
       const [irsRes, revsRes] = await Promise.all([
-        fetch(`${API_URL}/irs/all`),
-        fetch(`${API_URL}/revs/all`),
+        fetch(`${API_URL}/irs`), // ملاحظة: /irs يجلب غير المؤرشف فقط (isArchived == false)
+        fetch(`${API_URL}/revs`), // ملاحظة: /revs يجلب غير المؤرشف فقط
       ]);
 
       let irsList = [];
@@ -753,7 +702,7 @@ export default function EngineerRecords() {
             ir.department === department ||
             getDepartmentAbbr(ir.department) === departmentAbbr,
         );
-        console.log(`✅ Loaded ${irsList.length} IRs (including archived)`);
+        console.log(`✅ Loaded ${irsList.length} IRs`);
       }
 
       let revsList = [];
@@ -764,12 +713,9 @@ export default function EngineerRecords() {
             rev.department === department ||
             getDepartmentAbbr(rev.department) === departmentAbbr,
         );
-        console.log(
-          `✅ Loaded ${revsList.length} Revisions (including archived)`,
-        );
+        console.log(`✅ Loaded ${revsList.length} Revisions`);
       }
 
-      // بناء القائمة النهائية بدون إزالة التكرارات (كل عنصر له uniqueId)
       const allRecords = [
         ...irsList.map((ir) => ({
           ...ir,
@@ -778,14 +724,12 @@ export default function EngineerRecords() {
           source: "irs",
           displayNumber: ir.irNo,
           itemType: ir.requestType === "CPR" ? "CPR" : "IR",
-          formattedDate: formatDate(ir.sentAt || ir.createdAt || ir.archivedAt),
-          shortDate: formatShortDate(
-            ir.sentAt || ir.createdAt || ir.archivedAt,
-          ),
+          formattedDate: formatDate(ir.sentAt || ir.createdAt),
+          shortDate: formatShortDate(ir.sentAt || ir.createdAt),
           irAttach: ir.tags?.engineer || [],
           sdAttach: ir.tags?.sd || [],
           user: ir.user || "Unknown",
-          date: new Date(ir.sentAt || ir.createdAt || ir.archivedAt || 0),
+          date: new Date(ir.sentAt || ir.createdAt || 0),
           action: ir.action || "",
         })),
         ...revsList.map((rev) => ({
@@ -795,23 +739,18 @@ export default function EngineerRecords() {
           source: "revs",
           displayNumber: rev.displayNumber || rev.revNo || rev.irNo,
           itemType: "REV",
-          formattedDate: formatDate(
-            rev.sentAt || rev.createdAt || rev.archivedAt,
-          ),
-          shortDate: formatShortDate(
-            rev.sentAt || rev.createdAt || rev.archivedAt,
-          ),
+          formattedDate: formatDate(rev.sentAt || rev.createdAt),
+          shortDate: formatShortDate(rev.sentAt || rev.createdAt),
           irAttach: rev.tags?.engineer || [],
           sdAttach: rev.tags?.sd || [],
           user: rev.user || "Unknown",
-          date: new Date(rev.sentAt || rev.createdAt || rev.archivedAt || 0),
+          date: new Date(rev.sentAt || rev.createdAt || 0),
           action: rev.action || "",
         })),
       ];
 
       console.log(`📊 Total records: ${allRecords.length}`);
 
-      // ترتيب حسب التاريخ (الأحدث أولاً)
       allRecords.sort((a, b) => b.date - a.date);
 
       setRecords(allRecords);
@@ -833,10 +772,7 @@ export default function EngineerRecords() {
         .sort((a, b) => a.username.localeCompare(b.username));
       setUsers(uniqueUsers);
 
-      showToast(
-        `✅ Loaded ${allRecords.length} records (${allRecords.filter((r) => r.isArchived).length} archived)`,
-        "success",
-      );
+      showToast(`✅ Loaded ${allRecords.length} records`, "success");
     } catch (err) {
       console.error("Error loading records:", err);
       setError(err.message);
@@ -846,15 +782,10 @@ export default function EngineerRecords() {
     }
   };
 
-  // ===================== Calculate Statistics =====================
+  // ===================== Calculate Statistics (بدون archived) =====================
   const calculateStats = (recordsList) => {
-    const pending = recordsList.filter(
-      (r) => !r.isDone && !r.isArchived,
-    ).length;
-    const completed = recordsList.filter(
-      (r) => r.isDone && !r.isArchived,
-    ).length;
-    const archived = recordsList.filter((r) => r.isArchived).length;
+    const pending = recordsList.filter((r) => !r.isDone).length;
+    const completed = recordsList.filter((r) => r.isDone).length;
     const revisions = recordsList.filter((r) => r.isRevision).length;
     const cpr = recordsList.filter(
       (r) => !r.isRevision && r.requestType === "CPR",
@@ -867,14 +798,13 @@ export default function EngineerRecords() {
       total: recordsList.length,
       pending,
       completed,
-      archived,
       revisions,
       cpr,
       ir,
     });
   };
 
-  // ===================== Filter Logic مع Action =====================
+  // ===================== Filter Logic =====================
   const filteredRecords = useCallback(() => {
     if (!records || records.length === 0) {
       return [];
@@ -909,17 +839,8 @@ export default function EngineerRecords() {
       }
 
       if (filters.status !== "all") {
-        if (
-          filters.status === "pending" &&
-          (record.isDone || record.isArchived)
-        )
-          return false;
-        if (
-          filters.status === "completed" &&
-          (!record.isDone || record.isArchived)
-        )
-          return false;
-        if (filters.status === "archived" && !record.isArchived) return false;
+        if (filters.status === "pending" && record.isDone) return false;
+        if (filters.status === "completed" && !record.isDone) return false;
       }
 
       if (selectedUser !== "all" && record.user !== selectedUser) return false;
@@ -979,8 +900,6 @@ export default function EngineerRecords() {
 
   // ===================== Style Helper Functions =====================
   const getStatusColor = useCallback((item) => {
-    if (item.isArchived)
-      return "bg-gray-100 text-gray-800 border border-gray-300";
     if (item.isDone)
       return "bg-emerald-100 text-emerald-800 border border-emerald-300";
     return "bg-yellow-100 text-yellow-800 border border-yellow-300";
@@ -998,9 +917,7 @@ export default function EngineerRecords() {
   }, []);
 
   const getStatusText = useCallback((item) => {
-    if (item.isArchived) return "Archived";
-    if (item.isDone) return "Completed";
-    return "Pending";
+    return item.isDone ? "Done" : "Pending";
   }, []);
 
   // ===================== Event Handlers =====================
@@ -1042,50 +959,13 @@ export default function EngineerRecords() {
   }, [showToast]);
 
   const handleRefresh = useCallback(() => {
-    loadAllRecords();
+    loadRecords();
     showToast("Data refreshed", "success");
-  }, [loadAllRecords, showToast]);
+  }, [loadRecords, showToast]);
 
   const handleNavigateToCreate = useCallback(() => {
     navigate("/engineer");
   }, [navigate]);
-
-  // ===================== Archive / Restore Handlers (باستخدام uniqueId) =====================
-  const handleArchive = useCallback(
-    async (item) => {
-      const uniqueId = item.uniqueId || item.id;
-      if (!uniqueId) {
-        showToast("❌ Item has no unique identifier", "error");
-        return;
-      }
-
-      if (!window.confirm(`Archive ${item.displayNumber}?`)) return;
-
-      try {
-        const res = await fetch(`${API_URL}/archive`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            uniqueId: uniqueId,
-            role: "engineer",
-            collection: item.isRevision ? "revs" : "irs",
-          }),
-        });
-
-        if (res.ok) {
-          showToast("✅ Item archived successfully!");
-          loadAllRecords(); // إعادة تحميل البيانات
-        } else {
-          const data = await res.json();
-          throw new Error(data.error || "Archive failed");
-        }
-      } catch (err) {
-        console.error("Archive error:", err);
-        showToast(`❌ Archive failed: ${err.message}`, "error");
-      }
-    },
-    [loadAllRecords, showToast],
-  );
 
   // Main render
   if (!user) {
@@ -1097,12 +977,10 @@ export default function EngineerRecords() {
   }
 
   const filteredList = filteredRecords();
-  const archivedCount = records.filter((r) => r.isArchived).length;
 
   console.log("📊 Render stats:", {
     totalRecords: records.length,
     filteredCount: filteredList.length,
-    archivedCount,
     stats,
   });
 
@@ -1124,11 +1002,6 @@ export default function EngineerRecords() {
               User:{" "}
               <span className="font-semibold text-blue-600">
                 {user?.username}
-              </span>
-              <span className="mx-2">•</span>
-              <span className="text-sm text-gray-500">
-                {records.length} total records
-                {archivedCount > 0 && ` (${archivedCount} archived)`}
               </span>
             </p>
           </div>
@@ -1198,7 +1071,6 @@ export default function EngineerRecords() {
           getTypeColor={getTypeColor}
           getStatusText={getStatusText}
           getItemTypeText={getItemTypeText}
-          onArchive={handleArchive}
           onResetFilters={handleResetFilters}
           onNavigate={handleNavigateToCreate}
         />
@@ -1206,14 +1078,7 @@ export default function EngineerRecords() {
         {/* Information Footer */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-4 text-center text-blue-700">
           <p>
-            Showing all records for {department} department • Active + Archived
-          </p>
-          <p className="text-sm text-blue-600 mt-1">
-            Sources: IRs (
-            {records.filter((r) => !r.isRevision && !r.isArchived).length}),
-            Revisions (
-            {records.filter((r) => r.isRevision && !r.isArchived).length}),
-            Archived ({archivedCount})
+            Showing all records for {department} department • Active only
           </p>
         </div>
       </div>

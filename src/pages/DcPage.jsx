@@ -1,4 +1,4 @@
-// src/pages/DcPage.jsx - النسخة النهائية مع تحسينات Copy All و Archive لكل قسم
+// src/pages/DcPage.jsx - النسخة النهائية مع دعم uniqueId لكل عملية
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { copyRow, copyAllRows } from "../firebaseService";
 import { API_URL } from "../config";
@@ -90,7 +90,7 @@ const RevisionChip = memo(({ rev, onMarkDone, onArchive }) => {
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            onMarkDone(rev.irNo || rev.revNo);
+                            onMarkDone(rev); // تمرير الكائن الكامل
                         }}
                         className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-black text-white rounded-lg transition flex-1"
                     >
@@ -100,7 +100,7 @@ const RevisionChip = memo(({ rev, onMarkDone, onArchive }) => {
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        onArchive(rev.irNo || rev.revNo);
+                        onArchive(rev); // تمرير الكائن الكامل
                     }}
                     className="px-3 py-1.5 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition flex-1"
                 >
@@ -319,7 +319,7 @@ const CPRTableRow = memo(
                             </button>
                         </div>
                         <button
-                            onClick={() => onArchive(ir.irNo)}
+                            onClick={() => onArchive(ir)} // تمرير الكائن الكامل
                             className="w-full px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm flex items-center justify-center gap-1 shadow-sm transition"
                         >
                             <span>📁</span> Archive
@@ -546,7 +546,7 @@ const IRTableRow = memo(
                             </button>
                         </div>
                         <button
-                            onClick={() => onArchive(ir.irNo)}
+                            onClick={() => onArchive(ir)} // تمرير الكائن الكامل
                             className="w-full px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm flex items-center justify-center gap-1 shadow-sm transition"
                         >
                             <span>📁</span> Archive
@@ -580,7 +580,7 @@ const ProjectSection = memo(
         onArchive,
         onMarkRevDone,
         onCopyAll, // still used for the project-level button
-        onCopyAllInDept,   // new prop for department-level copy all
+        onCopyAllInDept, // new prop for department-level copy all
         onArchiveAllInDept, // new prop for department-level archive all
         downloadedIRs,
         getTypeClass,
@@ -650,7 +650,11 @@ const ProjectSection = memo(
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {projectRevs.map((rev) => (
                                     <RevisionChip
-                                        key={`${rev.irNo}-${rev.sentAt || ""}`}
+                                        key={
+                                            rev.uniqueId ||
+                                            rev.id ||
+                                            `${rev.irNo}-${rev.sentAt || ""}`
+                                        }
                                         rev={rev}
                                         onMarkDone={onMarkRevDone}
                                         onArchive={onArchive}
@@ -723,7 +727,9 @@ const ProjectSection = memo(
                                                     Copy All
                                                 </button>
                                                 <button
-                                                    onClick={() => onArchiveAllInDept(cprList, project, dept)}
+                                                    onClick={() =>
+                                                        onArchiveAllInDept(cprList, project, dept)
+                                                    }
                                                     className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-sm"
                                                 >
                                                     Archive All
@@ -746,7 +752,7 @@ const ProjectSection = memo(
                                                 <tbody>
                                                     {cprList.map((ir) => (
                                                         <CPRTableRow
-                                                            key={ir.irNo}
+                                                            key={ir.uniqueId || ir.id}
                                                             ir={ir}
                                                             customNumber={customNumbers[ir.irNo]}
                                                             isSaving={savingSerials}
@@ -833,7 +839,9 @@ const ProjectSection = memo(
                                                     Copy All
                                                 </button>
                                                 <button
-                                                    onClick={() => onArchiveAllInDept(irList, project, dept)}
+                                                    onClick={() =>
+                                                        onArchiveAllInDept(irList, project, dept)
+                                                    }
                                                     className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-sm"
                                                 >
                                                     Archive All
@@ -856,7 +864,7 @@ const ProjectSection = memo(
                                                 <tbody>
                                                     {irList.map((ir) => (
                                                         <IRTableRow
-                                                            key={ir.irNo}
+                                                            key={ir.uniqueId || ir.id}
                                                             ir={ir}
                                                             customNumber={customNumbers[ir.irNo]}
                                                             isSaving={savingSerials}
@@ -997,6 +1005,7 @@ export default function DcPage() {
                 // Normalize IRs
                 const normalizedIrs = listIrs.map((ir) => ({
                     ...ir,
+                    uniqueId: ir.uniqueId || ir.id, // ضمان وجود uniqueId
                     isRevision: false,
                     isCPR: ir.requestType === "CPR",
                     floor: ir.floor || "",
@@ -1008,6 +1017,7 @@ export default function DcPage() {
                 // Normalize Revisions
                 const normalizedRevs = listRevs.map((rev) => ({
                     ...rev,
+                    uniqueId: rev.uniqueId || rev.id,
                     isRevision: true,
                     revText: rev.revText || rev.revNo?.split("-").pop() || "R1",
                     irNo: rev.revNo || rev.irNo || "",
@@ -1159,120 +1169,155 @@ export default function DcPage() {
     }, [irs, filters, searchTerm]);
 
     // ================== دوال جديدة لنسخ وأرشفة كل العناصر في قسم ==================
-    const handleCopyAllInDept = useCallback(async (items, deptName) => {
-        const nonRevisionItems = items.filter(item => !item.isRevision);
-        if (nonRevisionItems.length === 0) {
-            showToast("No IRs/CPRs to copy in this department");
+    const handleCopyAllInDept = useCallback(
+        async (items, deptName) => {
+            const nonRevisionItems = items.filter((item) => !item.isRevision);
+            if (nonRevisionItems.length === 0) {
+                showToast("No IRs/CPRs to copy in this department");
+                return;
+            }
+            try {
+                const listWithTypes = nonRevisionItems.map((ir) => {
+                    const projectTypesMap = typesMap[ir.project] || {};
+                    return {
+                        ...ir,
+                        typesMap: projectTypesMap,
+                        locationType: ir.location
+                            ? projectTypesMap[ir.location]
+                            : ir.isCPR
+                                ? "CPR"
+                                : "IR",
+                    };
+                });
+                await copyAllRows(listWithTypes);
+                showToast(
+                    `✔ Copied ${nonRevisionItems.length} items from ${deptName} department!`,
+                );
+            } catch (err) {
+                console.error("copyAll error:", err);
+                showToast("Copy all failed");
+            }
+        },
+        [typesMap, showToast],
+    );
+
+    const handleArchiveAllInDept = useCallback(
+        async (items, project, deptName) => {
+            const nonArchivedItems = items.filter((item) => !item.isArchived);
+            if (nonArchivedItems.length === 0) {
+                showToast("No items to archive in this department");
+                return;
+            }
+
+            if (
+                !window.confirm(
+                    `Archive all ${nonArchivedItems.length} items in ${deptName} department (Project: ${project})?`,
+                )
+            )
+                return;
+
+            let successCount = 0;
+            let failCount = 0;
+
+            for (const item of nonArchivedItems) {
+                try {
+                    const res = await fetch(`${API_URL}/archive`, {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            uniqueId: item.uniqueId || item.id,
+                            role: "dc",
+                            collection: item.isRevision ? "revs" : "irs",
+                        }),
+                    });
+
+                    if (res.ok) {
+                        successCount++;
+                        setIRs((prev) =>
+                            prev.filter(
+                                (x) => (x.uniqueId || x.id) !== (item.uniqueId || item.id),
+                            ),
+                        );
+                    } else {
+                        failCount++;
+                    }
+                } catch (err) {
+                    console.error("Archive failed for item:", item.irNo, err);
+                    failCount++;
+                }
+            }
+
+            showToast(
+                `✅ Archived ${successCount} items${failCount > 0 ? `, ${failCount} failed` : ""}`,
+            );
+        },
+        [],
+    );
+
+    // ================== دوال أخرى ==================
+    const handleArchive = useCallback(async (item) => {
+        const uniqueId = item.uniqueId || item.id;
+        if (!uniqueId) {
+            showToast("❌ Item has no unique identifier", "error");
             return;
         }
-        try {
-            const listWithTypes = nonRevisionItems.map((ir) => {
-                const projectTypesMap = typesMap[ir.project] || {};
-                return {
-                    ...ir,
-                    typesMap: projectTypesMap,
-                    locationType: ir.location
-                        ? projectTypesMap[ir.location]
-                        : ir.isCPR
-                            ? "CPR"
-                            : "IR",
-                };
-            });
-            await copyAllRows(listWithTypes);
-            showToast(`✔ Copied ${nonRevisionItems.length} items from ${deptName} department!`);
-        } catch (err) {
-            console.error("copyAll error:", err);
-            showToast("Copy all failed");
-        }
-    }, [typesMap, showToast]);
-
-const handleArchiveAllInDept = useCallback(async (items, project, deptName) => {
-    const nonArchivedItems = items.filter(item => !item.isArchived);
-    if (nonArchivedItems.length === 0) {
-        showToast("No items to archive in this department");
-        return;
-    }
-
-    if (!window.confirm(`Archive all ${nonArchivedItems.length} items in ${deptName} department (Project: ${project})?`)) return;
-
-    let successCount = 0;
-    let failCount = 0;
-
-    for (const item of nonArchivedItems) {
+        const itemName = item.isRevision ? "Revision" : (item.isCPR ? "CPR" : "IR");
+        if (!window.confirm(`Archive ${itemName} ${item.irNo}?`)) return;
         try {
             const res = await fetch(`${API_URL}/archive`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    uniqueId: item.uniqueId || item.id,   // ← استخدام uniqueId
+                    uniqueId: uniqueId,
                     role: "dc",
                     collection: item.isRevision ? "revs" : "irs"
                 }),
             });
-
-            if (res.ok) {
-                successCount++;
-                // إزالة العنصر باستخدام uniqueId
-                setIRs(prev => prev.filter(x => (x.uniqueId || x.id) !== (item.uniqueId || item.id)));
-            } else {
-                failCount++;
-            }
+            const json = await parseJsonSafe(res);
+            if (!res.ok) throw new Error(json.error || "Archive failed");
+            setIRs(prev => prev.filter(x => (x.uniqueId || x.id) !== uniqueId));
+            setCustomNumbers(prev => {
+                const newMap = { ...prev };
+                delete newMap[item.irNo];
+                return newMap;
+            });
+            delete customNumbersRef.current[item.irNo];
+            showToast(`✅ ${itemName} archived successfully!`);
         } catch (err) {
-            console.error("Archive failed for item:", item.irNo, err);
-            failCount++;
+            console.error("Archive failed:", err);
+            showToast(`❌ Archive failed: ${err.message}`);
         }
-    }
-
-    showToast(`✅ Archived ${successCount} items${failCount > 0 ? `, ${failCount} failed` : ''}`);
-}, []);
-
-    // ================== دوال أخرى ==================
-const handleArchive = useCallback(async (item) => {
-    const itemName = item.isRevision ? "Revision" : (item.isCPR ? "CPR" : "IR");
-    if (!window.confirm(`Archive ${itemName} ${item.irNo}?`)) return;
-    try {
-        const res = await fetch(`${API_URL}/archive`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                uniqueId: item.uniqueId || item.id,   // ← استخدام uniqueId
-                role: "dc",
-                collection: item.isRevision ? "revs" : "irs"
-            }),
-        });
-        const json = await parseJsonSafe(res);
-        if (!res.ok) throw new Error(json.error || "Archive failed");
-        // إزالة العنصر من state باستخدام uniqueId
-        setIRs(prev => prev.filter(x => (x.uniqueId || x.id) !== (item.uniqueId || item.id)));
-        setCustomNumbers(prev => {
-            const newMap = { ...prev };
-            delete newMap[item.irNo];
-            return newMap;
-        });
-        delete customNumbersRef.current[item.irNo];
-        showToast(`✅ ${itemName} archived successfully!`);
-    } catch (err) {
-        console.error("Archive failed:", err);
-        showToast(`❌ Archive failed: ${err.message}`);
-    }
-}, []);
-
+    }, []);
 
     const markRevDone = useCallback(
-        async (irNo) => {
+        async (item) => {
+            if (!item) {
+                showToast("Item not found");
+                return;
+            }
+            const uniqueId = item.uniqueId || item.id;
+            if (!uniqueId) {
+                showToast("❌ Item has no unique identifier", "error");
+                return;
+            }
+            const irNo = item.irNo || item.revNo;
             if (!window.confirm(`Mark revision ${irNo} as done?`)) return;
             try {
                 const res = await fetch(`${API_URL}/revs/mark-done`, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ irNo, role: "dc" }),
+                    body: JSON.stringify({
+                        uniqueId: uniqueId,
+                        irNo: irNo,
+                        role: "dc",
+                    }),
                 });
                 const data = await res.json();
                 if (!res.ok)
                     throw new Error(data.error || "Failed to mark revision as done");
                 setIRs((prev) =>
                     prev.map((x) =>
-                        x.irNo === irNo || x.revNo === irNo
+                        (x.uniqueId || x.id) === uniqueId
                             ? { ...x, isDone: true, completedAt: new Date().toISOString() }
                             : x,
                     ),
@@ -1336,6 +1381,11 @@ const handleArchive = useCallback(async (item) => {
 
     const markItemAsDone = useCallback(
         async (item, newIrNo = null) => {
+            const uniqueId = item.uniqueId || item.id;
+            if (!uniqueId) {
+                showToast("❌ Item has no unique identifier", "error");
+                return;
+            }
             const irNoToUse = newIrNo || item.irNo;
             try {
                 const endpoint = item.isRevision
@@ -1344,7 +1394,11 @@ const handleArchive = useCallback(async (item) => {
                 const res = await fetch(endpoint, {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ irNo: irNoToUse, role: "dc" }),
+                    body: JSON.stringify({
+                        uniqueId: uniqueId,
+                        irNo: irNoToUse,
+                        role: "dc",
+                    }),
                 });
                 if (!res.ok) {
                     const data = await res.json();
@@ -1352,7 +1406,7 @@ const handleArchive = useCallback(async (item) => {
                 }
                 setIRs((prev) =>
                     prev.map((x) =>
-                        x.irNo === item.irNo
+                        (x.uniqueId || x.id) === uniqueId
                             ? {
                                 ...x,
                                 isDone: true,
@@ -1453,84 +1507,89 @@ const handleArchive = useCallback(async (item) => {
         },
         [customNumbers, getTodayDateStr, markItemAsDone, showToast],
     );
-const handleUpdateSerial = useCallback(async (irNo, newValue, shouldSave = true) => {
-    if (!shouldSave) {
-        setCustomNumbers((prev) => ({ ...prev, [irNo]: newValue }));
-        customNumbersRef.current[irNo] = newValue;
-        return;
-    }
-    const ir = irs.find((x) => x.irNo === irNo);
-    if (!ir || ir.isRevision) {
-        showToast("Cannot update revision numbers");
-        return;
-    }
-    const valueToSave = newValue || customNumbers[irNo] || customNumbersRef.current[irNo];
-    if (!valueToSave) {
-        showToast("Please enter a new IR number");
-        return;
-    }
-    const parts = valueToSave.split("-");
-    const lastPart = parts[parts.length - 1];
-    const numericSerial = parseInt(lastPart);
-    if (isNaN(numericSerial) || numericSerial < 1) {
-        showToast("IR must end with valid number (e.g., 001)");
-        return;
-    }
-    setSavingSerials((s) => ({ ...s, [irNo]: true }));
-    try {
-        const user = JSON.parse(localStorage.getItem("user") || "null");
-        const res = await fetch(`${API_URL}/irs/update-ir-number`, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                uniqueId: ir.uniqueId || ir.id,  // ← إضافة uniqueId
-                irNo,  // نحتفظ بالرقم القديم للتوافق
-                newSerial: numericSerial,
-                role: user?.role || "dc",
-                project: ir.project,
-                department: ir.department,
-                requestType: ir.requestType || "IR",
-            }),
-        });
-        const json = await parseJsonSafe(res);
-        if (!res.ok) throw new Error(json.error || "Failed to update IR number");
-        const cleanProject = ir.project.replace(/ /g, "-").toUpperCase();
-        const deptCode = getDepartmentAbbr(ir.department);
-        let newIrNo;
-        if (ir.requestType === "CPR" || ir.isCPR) {
-            newIrNo = `BADYA-CON-${cleanProject}-CPR-${numericSerial.toString().padStart(3, "0")}`;
-        } else {
-            newIrNo = `BADYA-CON-${cleanProject}-IR-${deptCode}-${numericSerial.toString().padStart(3, "0")}`;
-        }
-        // تحديث العنصر المحدد فقط باستخدام uniqueId
-        setIRs((prev) =>
-            prev.map((item) => {
-                if ((item.uniqueId || item.id) === (ir.uniqueId || ir.id)) {
-                    return { ...item, irNo: newIrNo };
+
+    const handleUpdateSerial = useCallback(
+        async (irNo, newValue, shouldSave = true) => {
+            if (!shouldSave) {
+                setCustomNumbers((prev) => ({ ...prev, [irNo]: newValue }));
+                customNumbersRef.current[irNo] = newValue;
+                return;
+            }
+            const ir = irs.find((x) => x.irNo === irNo);
+            if (!ir || ir.isRevision) {
+                showToast("Cannot update revision numbers");
+                return;
+            }
+            const valueToSave =
+                newValue || customNumbers[irNo] || customNumbersRef.current[irNo];
+            if (!valueToSave) {
+                showToast("Please enter a new IR number");
+                return;
+            }
+            const parts = valueToSave.split("-");
+            const lastPart = parts[parts.length - 1];
+            const numericSerial = parseInt(lastPart);
+            if (isNaN(numericSerial) || numericSerial < 1) {
+                showToast("IR must end with valid number (e.g., 001)");
+                return;
+            }
+            setSavingSerials((s) => ({ ...s, [irNo]: true }));
+            try {
+                const user = JSON.parse(localStorage.getItem("user") || "null");
+                const res = await fetch(`${API_URL}/irs/update-ir-number`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        uniqueId: ir.uniqueId || ir.id,
+                        irNo: irNo,
+                        newSerial: numericSerial,
+                        role: user?.role || "dc",
+                        project: ir.project,
+                        department: ir.department,
+                        requestType: ir.requestType || "IR",
+                    }),
+                });
+                const json = await parseJsonSafe(res);
+                if (!res.ok)
+                    throw new Error(json.error || "Failed to update IR number");
+                const cleanProject = ir.project.replace(/ /g, "-").toUpperCase();
+                const deptCode = getDepartmentAbbr(ir.department);
+                let newIrNo;
+                if (ir.requestType === "CPR" || ir.isCPR) {
+                    newIrNo = `BADYA-CON-${cleanProject}-CPR-${numericSerial.toString().padStart(3, "0")}`;
+                } else {
+                    newIrNo = `BADYA-CON-${cleanProject}-IR-${deptCode}-${numericSerial.toString().padStart(3, "0")}`;
                 }
-                return item;
-            })
-        );
-        setCustomNumbers((prev) => {
-            const newMap = { ...prev };
-            delete newMap[irNo];
-            newMap[newIrNo] = newIrNo;
-            return newMap;
-        });
-        delete customNumbersRef.current[irNo];
-        customNumbersRef.current[newIrNo] = newIrNo;
-        showToast(`✅ IR number updated to ${newIrNo}`);
-    } catch (err) {
-        console.error("Update failed:", err);
-        showToast(`❌ Update failed: ${err.message}`);
-    } finally {
-        setSavingSerials((s) => {
-            const map = { ...s };
-            delete map[irNo];
-            return map;
-        });
-    }
-}, [irs, showToast]);
+                setIRs((prev) =>
+                    prev.map((item) => {
+                        if ((item.uniqueId || item.id) === (ir.uniqueId || ir.id)) {
+                            return { ...item, irNo: newIrNo };
+                        }
+                        return item;
+                    }),
+                );
+                setCustomNumbers((prev) => {
+                    const newMap = { ...prev };
+                    delete newMap[irNo];
+                    newMap[newIrNo] = newIrNo;
+                    return newMap;
+                });
+                delete customNumbersRef.current[irNo];
+                customNumbersRef.current[newIrNo] = newIrNo;
+                showToast(`✅ IR number updated to ${newIrNo}`);
+            } catch (err) {
+                console.error("Update failed:", err);
+                showToast(`❌ Update failed: ${err.message}`);
+            } finally {
+                setSavingSerials((s) => {
+                    const map = { ...s };
+                    delete map[irNo];
+                    return map;
+                });
+            }
+        },
+        [irs, showToast],
+    );
 
     const projects = [
         ...new Set(irs.map((item) => item.project).filter(Boolean)),

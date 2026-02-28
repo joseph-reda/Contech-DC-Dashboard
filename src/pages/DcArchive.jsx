@@ -185,8 +185,8 @@ const ArchiveTableRow = memo(({
     getDepartmentAbbr
 }) => {
     const deptAbbr = getDepartmentAbbr(item.department);
-    const isDeletingNow = isDeleting[item.irNo];
-    const isRestoringNow = isRestoring[item.irNo];
+    const isDeletingNow = isDeleting[item.uniqueId || item.irNo];
+    const isRestoringNow = isRestoring[item.uniqueId || item.irNo];
     const [isEditingAction, setIsEditingAction] = useState(false);
     
     // دالة مساعدة لعرض Action (تعامل مع القيم الفارغة)
@@ -449,9 +449,9 @@ const ArchiveTableRow = memo(({
         </tr>
     );
 }, (prevProps, nextProps) => {
-    return prevProps.item.irNo === nextProps.item.irNo &&
-           prevProps.isDeleting[prevProps.item.irNo] === nextProps.isDeleting[nextProps.item.irNo] &&
-           prevProps.isRestoring[prevProps.item.irNo] === nextProps.isRestoring[nextProps.item.irNo] &&
+    return prevProps.item.uniqueId === nextProps.item.uniqueId &&
+           prevProps.isDeleting[prevProps.item.uniqueId] === nextProps.isDeleting[nextProps.item.uniqueId] &&
+           prevProps.isRestoring[prevProps.item.uniqueId] === nextProps.isRestoring[nextProps.item.uniqueId] &&
            prevProps.isUpdatingAction === nextProps.isUpdatingAction;
 });
 
@@ -515,13 +515,13 @@ const ProjectSection = memo(({
                         </tr>
                     </thead>
                     <tbody>
-                        {items.map((item, index) => (
+                        {items.map((item) => (
                             <ArchiveTableRow
-                                key={`${item.irNo || item.revNo}-${index}`}
+                                key={item.uniqueId || item.irNo}
                                 item={item}
                                 isDeleting={isDeleting}
                                 isRestoring={isRestoring}
-                                isUpdatingAction={isUpdatingAction[item.irNo]}
+                                isUpdatingAction={isUpdatingAction}
                                 onRestore={onRestore}
                                 onDeleteClick={onDeleteClick}
                                 onUpdateAction={onUpdateAction}
@@ -983,10 +983,12 @@ export default function DcArchive() {
             ];
 
             console.log('📦 Total items fetched:', allItems.length);
-            console.log('📦 Archived items count:', allItems.filter(i => i.isArchived === true).length);
+            console.log('📦 Archived items count:', allItems.filter(i => i.isArchived === true || i.isArchived === "true").length);
 
-            // تطبيق الفلاتر الأساسية (isArchived == true)
-            let filtered = allItems.filter(item => item.isArchived === true);
+            // تطبيق الفلاتر الأساسية (isArchived == true) - مع مراعاة القيم المختلفة
+            let filtered = allItems.filter(item => 
+                item.isArchived === true || item.isArchived === "true" || item.isArchived === 1
+            );
             console.log('✅ after isArchived filter:', filtered.length);
 
             if (filters.project !== "all") {
@@ -1068,6 +1070,7 @@ export default function DcArchive() {
             // تنسيق البيانات وإضافة القيم الافتراضية للحقول المفقودة
             const formatted = paginated.map(item => ({
                 ...item,
+                uniqueId: item.id || item.uniqueId, // الحفاظ على المعرف الفريد
                 irNo: item.isRevision ? item.revNo || item.irNo : item.irNo,
                 revNo: item.revNo || (item.isRevision ? item.irNo : undefined),
                 desc: item.desc || item.revNote || "",
@@ -1180,58 +1183,79 @@ export default function DcArchive() {
     const departments = [...new Set(items.map(item => getDepartmentAbbr(item.department)).filter(Boolean))].sort();
     const archivedByOptions = [...new Set(items.map(item => item.archivedBy).filter(Boolean))].sort();
 
-    // ===================== Action Handlers =====================
+    // ===================== Action Handlers (معدلة لاستخدام uniqueId) =====================
     const handleRestore = useCallback(async (item) => {
+        const uniqueId = item.uniqueId || item.id;
+        if (!uniqueId) {
+            showToastMessage("❌ Item has no unique identifier", "error");
+            return;
+        }
         if (!window.confirm(`Restore ${item.irNo} from archive?`)) return;
-        setRestoring(prev => ({ ...prev, [item.irNo]: true }));
+        setRestoring(prev => ({ ...prev, [uniqueId]: true }));
         try {
             const res = await fetch(`${API_URL}/unarchive`, {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({ irNo: item.irNo, role: "dc", isRevision: item.isRevision || false }),
+                body: JSON.stringify({ 
+                    uniqueId: uniqueId,
+                    role: "dc", 
+                    isRevision: item.isRevision || false,
+                    collection: item.isRevision ? "revs" : "irs"
+                }),
             });
             const json = await res.json();
             if (!res.ok) throw new Error(json.error || "Restore failed");
-            setItems(prev => prev.filter(x => x.irNo !== item.irNo));
+            setItems(prev => prev.filter(x => (x.uniqueId || x.id) !== uniqueId));
             showToastMessage("✅ Item restored successfully!", "success");
         } catch (err) {
             console.error("Restore error:", err);
             showToastMessage("❌ Restore failed: " + err.message, "error");
         } finally {
-            setRestoring(prev => ({ ...prev, [item.irNo]: false }));
+            setRestoring(prev => ({ ...prev, [uniqueId]: false }));
         }
     }, [showToastMessage]);
 
     const handleDelete = useCallback(async (item) => {
-        setDeleting(prev => ({ ...prev, [item.irNo]: true }));
+        const uniqueId = item.uniqueId || item.id;
+        if (!uniqueId) {
+            showToastMessage("❌ Item has no unique identifier", "error");
+            return;
+        }
+        setDeleting(prev => ({ ...prev, [uniqueId]: true }));
         try {
             const isRevision = item.isRevision || false;
             const endpoint = isRevision ? `${API_URL}/revs/delete` : `${API_URL}/irs/delete`;
-            const itemIdentifier = isRevision ? 'revNo' : 'irNo';
-            const itemId = item[itemIdentifier] || item.irNo;
             const res = await fetch(endpoint, { 
                 method: "POST",
                 headers: { "Content-Type": "application/json", "Accept": "application/json" },
-                body: JSON.stringify({ [itemIdentifier]: itemId, role: "dc" })
+                body: JSON.stringify({ 
+                    uniqueId: uniqueId,
+                    role: "dc" 
+                })
             });
             if (!res.ok) {
                 let errorMessage = `Delete failed: ${res.status}`;
                 try { const errorData = await res.json(); errorMessage = errorData.error || errorMessage; } catch {}
                 throw new Error(errorMessage);
             }
-            setItems(prev => prev.filter(x => x.irNo !== item.irNo));
+            setItems(prev => prev.filter(x => (x.uniqueId || x.id) !== uniqueId));
             showToastMessage("🗑️ Item deleted permanently!", "success");
         } catch (err) {
             console.error("❌ Delete error:", err);
             showToastMessage(`❌ Delete failed: ${err.message}`, "error");
         } finally {
-            setDeleting(prev => ({ ...prev, [item.irNo]: false }));
+            setDeleting(prev => ({ ...prev, [uniqueId]: false }));
             setShowDeleteConfirm(null);
         }
     }, [showToastMessage]);
 
     const handleUpdateAction = useCallback(async (item, newAction) => {
-        setUpdatingAction(prev => ({ ...prev, [item.irNo]: true }));
+        const uniqueId = item.uniqueId || item.id;
+        if (!uniqueId) {
+            showToastMessage("❌ Item has no unique identifier", "error");
+            return;
+        }
+        setUpdatingAction(prev => ({ ...prev, [uniqueId]: true }));
         try {
             const user = JSON.parse(localStorage.getItem("user") || "{}");
             const username = user.username || "unknown";
@@ -1240,7 +1264,7 @@ export default function DcArchive() {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
-                    irNo: item.irNo,
+                    uniqueId: uniqueId,
                     collection,
                     action: newAction,
                     updatedBy: username
@@ -1250,7 +1274,7 @@ export default function DcArchive() {
             if (!res.ok) throw new Error(data.error || "Failed to update action");
             
             setItems(prev => prev.map(i => 
-                i.irNo === item.irNo 
+                (i.uniqueId || i.id) === uniqueId
                     ? { 
                         ...i, 
                         action: newAction,
@@ -1264,7 +1288,7 @@ export default function DcArchive() {
             console.error("Update action error:", err);
             showToastMessage(`❌ Failed to update action: ${err.message}`, "error");
         } finally {
-            setUpdatingAction(prev => ({ ...prev, [item.irNo]: false }));
+            setUpdatingAction(prev => ({ ...prev, [uniqueId]: false }));
         }
     }, [showToastMessage]);
 
@@ -1320,7 +1344,7 @@ export default function DcArchive() {
                 item={showDeleteConfirm?.item}
                 onConfirm={handleDelete}
                 onCancel={() => setShowDeleteConfirm(null)}
-                isDeleting={showDeleteConfirm ? deleting[showDeleteConfirm.item.irNo] : false}
+                isDeleting={showDeleteConfirm ? deleting[showDeleteConfirm.item.uniqueId || showDeleteConfirm.item.id] : false}
             />
             
             <div className="mx-auto px-4 md:px-8 lg:px-20 py-8">

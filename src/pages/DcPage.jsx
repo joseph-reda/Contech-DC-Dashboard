@@ -1,4 +1,4 @@
-// src/pages/DcPage.jsx - النسخة النهائية مع حذف عمود Action بالكامل
+// src/pages/DcPage.jsx - النسخة النهائية مع تحسينات Copy All و Archive لكل قسم
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { copyRow, copyAllRows } from "../firebaseService";
 import { API_URL } from "../config";
@@ -265,8 +265,6 @@ const CPRTableRow = memo(
                     </div>
                 </td>
 
-                {/* تم حذف عمود Action هنا */}
-
                 <td className="p-3 align-top">
                     <div className="text-gray-600 whitespace-pre-line text-sm">
                         {formatDateShort(ir.sentAt)}
@@ -494,8 +492,6 @@ const IRTableRow = memo(
                     </div>
                 </td>
 
-                {/* تم حذف عمود Action هنا */}
-
                 <td className="p-3 align-top">
                     <div className="text-gray-600 whitespace-pre-line text-sm">
                         {formatDateShort(ir.sentAt)}
@@ -571,7 +567,7 @@ const IRTableRow = memo(
     },
 );
 
-// ==================== ProjectSection Component ====================
+// ==================== ProjectSection Component (معدل بإضافة أزرار لكل قسم) ====================
 const ProjectSection = memo(
     ({
         project,
@@ -583,7 +579,9 @@ const ProjectSection = memo(
         onDownloadWord,
         onArchive,
         onMarkRevDone,
-        onCopyAll,
+        onCopyAll, // still used for the project-level button
+        onCopyAllInDept,   // new prop for department-level copy all
+        onArchiveAllInDept, // new prop for department-level archive all
         downloadedIRs,
         getTypeClass,
         getStatusClass,
@@ -599,7 +597,7 @@ const ProjectSection = memo(
             (x) => !x.isRevision && !x.isCPR && x.requestType !== "CPR",
         );
 
-        // ترتيب الأقسام حسب الترتيب الأبجدي (اختياري)
+        // ترتيب الأقسام
         const sortedDepts = Object.keys(depts).sort();
 
         return (
@@ -628,6 +626,7 @@ const ProjectSection = memo(
                                 </span>
                             </div>
                         </div>
+                        {/* زر نسخ كل IRs في المشروع (يبقى كما هو) */}
                         <div className="flex gap-2">
                             <button
                                 onClick={() =>
@@ -674,6 +673,7 @@ const ProjectSection = memo(
                                         ({projectCPRs.length} items)
                                     </span>
                                 </h3>
+                                {/* زر نسخ كل CPRs في المشروع */}
                                 <button
                                     onClick={() => onCopyAll(projectCPRs)}
                                     className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm transition"
@@ -682,7 +682,6 @@ const ProjectSection = memo(
                                 </button>
                             </div>
 
-                            {/* عرض كل قسم (Department) داخل CPR مع فصل بينهم */}
                             {sortedDepts.map((dept, index) => {
                                 const cprList = depts[dept].filter(
                                     (ir) =>
@@ -694,24 +693,43 @@ const ProjectSection = memo(
                                         key={`cpr-${dept}`}
                                         className={`space-y-3 ${index > 0 ? "mt-8" : ""}`}
                                     >
-                                        <h4 className="text-md font-semibold text-gray-700 flex items-center gap-2">
-                                            <span
-                                                className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
-                                            ${dept === "ARCH"
-                                                        ? "bg-blue-100 text-blue-800"
-                                                        : dept === "ST"
-                                                            ? "bg-green-100 text-green-800"
-                                                            : dept === "ELECT"
-                                                                ? "bg-purple-100 text-purple-800"
-                                                                : dept === "MECH"
-                                                                    ? "bg-amber-100 text-amber-800"
-                                                                    : "bg-gray-100 text-gray-800"
-                                                    }`}
-                                            >
-                                                {dept}
-                                            </span>
-                                            {dept === "ST" ? "Civil/Structure" : dept} Department
-                                        </h4>
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-md font-semibold text-gray-700 flex items-center gap-2">
+                                                <span
+                                                    className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
+                                                        ${dept === "ARCH"
+                                                            ? "bg-blue-100 text-blue-800"
+                                                            : dept === "ST"
+                                                                ? "bg-green-100 text-green-800"
+                                                                : dept === "ELECT"
+                                                                    ? "bg-purple-100 text-purple-800"
+                                                                    : dept === "MECH"
+                                                                        ? "bg-amber-100 text-amber-800"
+                                                                        : "bg-gray-100 text-gray-800"
+                                                        }`}
+                                                >
+                                                    {dept}
+                                                </span>
+                                                {dept === "ST" ? "Civil/Structure" : dept} Department
+                                                <span className="text-sm font-normal text-gray-500 ml-2">
+                                                    ({cprList.length} items)
+                                                </span>
+                                            </h4>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => onCopyAllInDept(cprList, dept)}
+                                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+                                                >
+                                                    Copy All
+                                                </button>
+                                                <button
+                                                    onClick={() => onArchiveAllInDept(cprList, project, dept)}
+                                                    className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-sm"
+                                                >
+                                                    Archive All
+                                                </button>
+                                            </div>
+                                        </div>
                                         <div className="overflow-x-auto rounded-lg border border-green-200">
                                             <table className="w-full">
                                                 <thead className="bg-green-700 text-white">
@@ -720,7 +738,6 @@ const ProjectSection = memo(
                                                         <th className="p-3 text-left">Description</th>
                                                         <th className="p-3 text-left">Type</th>
                                                         <th className="p-3 text-left">Attachments</th>
-                                                        {/* تم حذف رأس Action */}
                                                         <th className="p-3 text-left">Sent At</th>
                                                         <th className="p-3 text-left">Status</th>
                                                         <th className="p-3 text-left">Actions</th>
@@ -775,7 +792,6 @@ const ProjectSection = memo(
                                 </button>
                             </div>
 
-                            {/* عرض كل قسم (Department) داخل IR مع فصل بينهم */}
                             {sortedDepts.map((dept, index) => {
                                 const irList = depts[dept].filter(
                                     (ir) =>
@@ -787,24 +803,43 @@ const ProjectSection = memo(
                                         key={`ir-${dept}`}
                                         className={`space-y-3 ${index > 0 ? "mt-8" : ""}`}
                                     >
-                                        <h4 className="text-md font-semibold text-gray-700 flex items-center gap-2">
-                                            <span
-                                                className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
-                                            ${dept === "ARCH"
-                                                        ? "bg-blue-100 text-blue-800"
-                                                        : dept === "ST"
-                                                            ? "bg-green-100 text-green-800"
-                                                            : dept === "ELECT"
-                                                                ? "bg-purple-100 text-purple-800"
-                                                                : dept === "MECH"
-                                                                    ? "bg-amber-100 text-amber-800"
-                                                                    : "bg-gray-100 text-gray-800"
-                                                    }`}
-                                            >
-                                                {dept}
-                                            </span>
-                                            {dept === "ST" ? "Civil/Structure" : dept} Department
-                                        </h4>
+                                        <div className="flex items-center justify-between">
+                                            <h4 className="text-md font-semibold text-gray-700 flex items-center gap-2">
+                                                <span
+                                                    className={`w-5 h-5 rounded-full flex items-center justify-center text-xs font-bold
+                                                        ${dept === "ARCH"
+                                                            ? "bg-blue-100 text-blue-800"
+                                                            : dept === "ST"
+                                                                ? "bg-green-100 text-green-800"
+                                                                : dept === "ELECT"
+                                                                    ? "bg-purple-100 text-purple-800"
+                                                                    : dept === "MECH"
+                                                                        ? "bg-amber-100 text-amber-800"
+                                                                        : "bg-gray-100 text-gray-800"
+                                                        }`}
+                                                >
+                                                    {dept}
+                                                </span>
+                                                {dept === "ST" ? "Civil/Structure" : dept} Department
+                                                <span className="text-sm font-normal text-gray-500 ml-2">
+                                                    ({irList.length} items)
+                                                </span>
+                                            </h4>
+                                            <div className="flex gap-2">
+                                                <button
+                                                    onClick={() => onCopyAllInDept(irList, dept)}
+                                                    className="px-3 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded text-sm"
+                                                >
+                                                    Copy All
+                                                </button>
+                                                <button
+                                                    onClick={() => onArchiveAllInDept(irList, project, dept)}
+                                                    className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white rounded text-sm"
+                                                >
+                                                    Archive All
+                                                </button>
+                                            </div>
+                                        </div>
                                         <div className="overflow-x-auto rounded-lg border border-blue-200">
                                             <table className="w-full">
                                                 <thead className="bg-blue-700 text-white">
@@ -813,7 +848,6 @@ const ProjectSection = memo(
                                                         <th className="p-3 text-left">Description</th>
                                                         <th className="p-3 text-left">Type</th>
                                                         <th className="p-3 text-left">Attachments</th>
-                                                        {/* تم حذف رأس Action */}
                                                         <th className="p-3 text-left">Sent At</th>
                                                         <th className="p-3 text-left">Status</th>
                                                         <th className="p-3 text-left">Actions</th>
@@ -969,7 +1003,6 @@ export default function DcPage() {
                     tags: ir.tags || { engineer: [], sd: [] },
                     departmentAbbr: getDepartmentAbbr(ir.department),
                     projectTypesMap: typesMapData[ir.project] || {},
-                    // تم إزالة action من هنا (يمكن تركه في البيانات لكن لن يعرض)
                 }));
 
                 // Normalize Revisions
@@ -999,7 +1032,6 @@ export default function DcPage() {
                         rev.revisionType === "CPR_REVISION" || rev.isCPRRevision,
                     isIRRevision: rev.revisionType === "IR_REVISION" || rev.isIRRevision,
                     projectTypesMap: typesMapData[rev.project] || {},
-                    // تم إزالة action من هنا
                 }));
 
                 const merged = [...normalizedIrs, ...normalizedRevs];
@@ -1126,45 +1158,105 @@ export default function DcPage() {
         });
     }, [irs, filters, searchTerm]);
 
-    // Action Handlers
-    const handleArchive = useCallback(
-        async (irNo) => {
-            const item = irs.find((x) => x.irNo === irNo || x.revNo === irNo);
-            if (!item) {
-                showToast("Item not found");
-                return;
+    // ================== دوال جديدة لنسخ وأرشفة كل العناصر في قسم ==================
+    const handleCopyAllInDept = useCallback(async (items, deptName) => {
+        const nonRevisionItems = items.filter(item => !item.isRevision);
+        if (nonRevisionItems.length === 0) {
+            showToast("No IRs/CPRs to copy in this department");
+            return;
+        }
+        try {
+            const listWithTypes = nonRevisionItems.map((ir) => {
+                const projectTypesMap = typesMap[ir.project] || {};
+                return {
+                    ...ir,
+                    typesMap: projectTypesMap,
+                    locationType: ir.location
+                        ? projectTypesMap[ir.location]
+                        : ir.isCPR
+                            ? "CPR"
+                            : "IR",
+                };
+            });
+            await copyAllRows(listWithTypes);
+            showToast(`✔ Copied ${nonRevisionItems.length} items from ${deptName} department!`);
+        } catch (err) {
+            console.error("copyAll error:", err);
+            showToast("Copy all failed");
+        }
+    }, [typesMap, showToast]);
+
+const handleArchiveAllInDept = useCallback(async (items, project, deptName) => {
+    const nonArchivedItems = items.filter(item => !item.isArchived);
+    if (nonArchivedItems.length === 0) {
+        showToast("No items to archive in this department");
+        return;
+    }
+
+    if (!window.confirm(`Archive all ${nonArchivedItems.length} items in ${deptName} department (Project: ${project})?`)) return;
+
+    let successCount = 0;
+    let failCount = 0;
+
+    for (const item of nonArchivedItems) {
+        try {
+            const res = await fetch(`${API_URL}/archive`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    uniqueId: item.uniqueId || item.id,   // ← استخدام uniqueId
+                    role: "dc",
+                    collection: item.isRevision ? "revs" : "irs"
+                }),
+            });
+
+            if (res.ok) {
+                successCount++;
+                // إزالة العنصر باستخدام uniqueId
+                setIRs(prev => prev.filter(x => (x.uniqueId || x.id) !== (item.uniqueId || item.id)));
+            } else {
+                failCount++;
             }
-            const itemName = item.isRevision ? "Revision" : item.isCPR ? "CPR" : "IR";
-            if (!window.confirm(`Archive ${itemName} ${irNo}?`)) return;
-            try {
-                const res = await fetch(`${API_URL}/archive`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        irNo,
-                        role: "dc",
-                        isRevision: item.isRevision || false,
-                    }),
-                });
-                const json = await parseJsonSafe(res);
-                if (!res.ok) throw new Error(json.error || "Archive failed");
-                setIRs((prev) =>
-                    prev.filter((x) => x.irNo !== irNo && x.revNo !== irNo),
-                );
-                setCustomNumbers((prev) => {
-                    const newMap = { ...prev };
-                    delete newMap[irNo];
-                    return newMap;
-                });
-                delete customNumbersRef.current[irNo];
-                showToast(`✅ ${itemName} archived successfully!`);
-            } catch (err) {
-                console.error("Archive failed:", err);
-                showToast(`❌ Archive failed: ${err.message}`);
-            }
-        },
-        [irs, showToast],
-    );
+        } catch (err) {
+            console.error("Archive failed for item:", item.irNo, err);
+            failCount++;
+        }
+    }
+
+    showToast(`✅ Archived ${successCount} items${failCount > 0 ? `, ${failCount} failed` : ''}`);
+}, []);
+
+    // ================== دوال أخرى ==================
+const handleArchive = useCallback(async (item) => {
+    const itemName = item.isRevision ? "Revision" : (item.isCPR ? "CPR" : "IR");
+    if (!window.confirm(`Archive ${itemName} ${item.irNo}?`)) return;
+    try {
+        const res = await fetch(`${API_URL}/archive`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                uniqueId: item.uniqueId || item.id,   // ← استخدام uniqueId
+                role: "dc",
+                collection: item.isRevision ? "revs" : "irs"
+            }),
+        });
+        const json = await parseJsonSafe(res);
+        if (!res.ok) throw new Error(json.error || "Archive failed");
+        // إزالة العنصر من state باستخدام uniqueId
+        setIRs(prev => prev.filter(x => (x.uniqueId || x.id) !== (item.uniqueId || item.id)));
+        setCustomNumbers(prev => {
+            const newMap = { ...prev };
+            delete newMap[item.irNo];
+            return newMap;
+        });
+        delete customNumbersRef.current[item.irNo];
+        showToast(`✅ ${itemName} archived successfully!`);
+    } catch (err) {
+        console.error("Archive failed:", err);
+        showToast(`❌ Archive failed: ${err.message}`);
+    }
+}, []);
+
 
     const markRevDone = useCallback(
         async (irNo) => {
@@ -1723,6 +1815,8 @@ export default function DcPage() {
                                 onArchive={handleArchive}
                                 onMarkRevDone={markRevDone}
                                 onCopyAll={handleCopyAll}
+                                onCopyAllInDept={handleCopyAllInDept}
+                                onArchiveAllInDept={handleArchiveAllInDept}
                                 downloadedIRs={downloadedIRs}
                                 getTypeClass={getTypeClass}
                                 getStatusClass={getStatusClass}

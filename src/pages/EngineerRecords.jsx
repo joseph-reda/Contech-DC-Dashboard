@@ -1,4 +1,4 @@
-// src/pages/EngineerRecords.jsx - النسخة النهائية مع إصلاح مشكلة whitespace
+// src/pages/EngineerRecords.jsx - النسخة النهائية مع دعم uniqueId والإزالة الصحيحة للتكرارات
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
@@ -23,11 +23,15 @@ const ToastNotification = memo(({ toast, onClose }) => {
   if (!toast.show) return null;
 
   return (
-    <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium animate-in fade-in slide-in-from-top-5 ${
-      toast.type === "error" ? "bg-red-600" : 
-      toast.type === "warning" ? "bg-amber-600" : 
-      "bg-green-600"
-    }`}>
+    <div
+      className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium animate-in fade-in slide-in-from-top-5 ${
+        toast.type === "error"
+          ? "bg-red-600"
+          : toast.type === "warning"
+            ? "bg-amber-600"
+            : "bg-green-600"
+      }`}
+    >
       <div className="flex items-center gap-2">
         {toast.type === "error" ? "❌" : toast.type === "warning" ? "⚠️" : "✅"}
         {toast.message}
@@ -59,7 +63,9 @@ const StatsCards = memo(({ stats }) => (
       <div className="text-sm text-gray-500">Pending</div>
     </div>
     <div className="bg-white rounded-xl shadow p-4 text-center">
-      <div className="text-2xl font-bold text-emerald-600">{stats.completed}</div>
+      <div className="text-2xl font-bold text-emerald-600">
+        {stats.completed}
+      </div>
       <div className="text-sm text-gray-500">Completed</div>
     </div>
     <div className="bg-white rounded-xl shadow p-4 text-center">
@@ -75,214 +81,226 @@ const StatsCards = memo(({ stats }) => (
       <div className="text-sm text-gray-500">CPR</div>
     </div>
     <div className="bg-white rounded-xl shadow p-4 text-center">
-      <div className="text-2xl font-bold text-purple-600">{stats.revisions}</div>
+      <div className="text-2xl font-bold text-purple-600">
+        {stats.revisions}
+      </div>
       <div className="text-sm text-gray-500">Revisions</div>
     </div>
   </div>
 ));
 
 // مكون Search And Filters - مع إضافة فلتر Action
-const SearchAndFilters = memo(({ 
-  searchTerm, 
-  onSearchChange, 
-  onClearSearch,
-  filters, 
-  onFilterChange,
-  projects,
-  users,
-  onResetFilters,
-  dateRange,
-  onDateRangeChange,
-  selectedUser,
-  onUserChange,
-  actionFilter,
-  onActionChange,
-  actionOptions
-}) => {
-  const hasActiveFilters = filters.project !== "all" || filters.type !== "all" || 
-                          filters.status !== "all" || searchTerm || 
-                          dateRange !== "all" || selectedUser !== "all" ||
-                          actionFilter !== "all";
+const SearchAndFilters = memo(
+  ({
+    searchTerm,
+    onSearchChange,
+    onClearSearch,
+    filters,
+    onFilterChange,
+    projects,
+    users,
+    onResetFilters,
+    dateRange,
+    onDateRangeChange,
+    selectedUser,
+    onUserChange,
+    actionFilter,
+    onActionChange,
+    actionOptions,
+  }) => {
+    const hasActiveFilters =
+      filters.project !== "all" ||
+      filters.type !== "all" ||
+      filters.status !== "all" ||
+      searchTerm ||
+      dateRange !== "all" ||
+      selectedUser !== "all" ||
+      actionFilter !== "all";
 
-  return (
-    <div className="bg-white rounded-xl shadow p-6 mb-6">
-      <div className="flex flex-col md:flex-row gap-4 items-end">
-        <div className="flex-1">
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            🔍 Search All Records
-          </label>
-          <input
-            type="text"
-            placeholder="Search by number, description, project, location..."
-            className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
-            value={searchTerm}
-            onChange={(e) => onSearchChange(e.target.value)}
-            autoComplete="off"
-          />
-        </div>
-        <button
-          onClick={onClearSearch}
-          className="px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition"
-        >
-          Clear Search
-        </button>
-      </div>
-
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mt-4">
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Project
-          </label>
-          <select
-            value={filters.project}
-            onChange={(e) => onFilterChange('project', e.target.value)}
-            className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+    return (
+      <div className="bg-white rounded-xl shadow p-6 mb-6">
+        <div className="flex flex-col md:flex-row gap-4 items-end">
+          <div className="flex-1">
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              🔍 Search All Records
+            </label>
+            <input
+              type="text"
+              placeholder="Search by number, description, project, location..."
+              className="w-full p-3 border rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none"
+              value={searchTerm}
+              onChange={(e) => onSearchChange(e.target.value)}
+              autoComplete="off"
+            />
+          </div>
+          <button
+            onClick={onClearSearch}
+            className="px-4 py-3 bg-gray-200 hover:bg-gray-300 text-gray-700 rounded-lg font-medium transition"
           >
-            <option value="all">All Projects</option>
-            {projects.map(project => (
-              <option key={project} value={project}>{project}</option>
-            ))}
-          </select>
+            Clear Search
+          </button>
         </div>
 
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Type
-          </label>
-          <select
-            value={filters.type}
-            onChange={(e) => onFilterChange('type', e.target.value)}
-            className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Types</option>
-            <option value="ir">IR Only</option>
-            <option value="cpr">CPR Only</option>
-            <option value="revision">Revisions Only</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Status
-          </label>
-          <select
-            value={filters.status}
-            onChange={(e) => onFilterChange('status', e.target.value)}
-            className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Status</option>
-            <option value="pending">Pending</option>
-            <option value="completed">Completed</option>
-            <option value="archived">Archived</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Date Range
-          </label>
-          <select
-            value={dateRange}
-            onChange={(e) => onDateRangeChange(e.target.value)}
-            className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Dates</option>
-            <option value="today">Today</option>
-            <option value="week">Last 7 Days</option>
-            <option value="month">Last 30 Days</option>
-            <option value="year">Last Year</option>
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            User
-          </label>
-          <select
-            value={selectedUser}
-            onChange={(e) => onUserChange(e.target.value)}
-            className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Users</option>
-            {users.map(user => (
-              <option key={user.username} value={user.username}>
-                {user.fullname || user.username}
-              </option>
-            ))}
-          </select>
-        </div>
-
-        <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1">
-            Action
-          </label>
-          <select
-            value={actionFilter}
-            onChange={(e) => onActionChange(e.target.value)}
-            className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
-          >
-            <option value="all">All Actions</option>
-            {actionOptions.map(action => (
-              <option key={action} value={action}>Action {action}</option>
-            ))}
-          </select>
-        </div>
-      </div>
-
-      {/* Active Filters */}
-      {hasActiveFilters && (
-        <div className="mt-4 pt-4 border-t">
-          <div className="flex items-center justify-between flex-wrap gap-2">
-            <div className="text-sm text-gray-600 flex flex-wrap gap-2">
-              <span className="font-medium">Active filters:</span>
-              {filters.project !== "all" && (
-                <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
-                  Project: {filters.project}
-                </span>
-              )}
-              {filters.type !== "all" && (
-                <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
-                  Type: {filters.type}
-                </span>
-              )}
-              {filters.status !== "all" && (
-                <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
-                  Status: {filters.status}
-                </span>
-              )}
-              {dateRange !== "all" && (
-                <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded text-xs">
-                  Date: {dateRange}
-                </span>
-              )}
-              {selectedUser !== "all" && (
-                <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs">
-                  User: {selectedUser}
-                </span>
-              )}
-              {actionFilter !== "all" && (
-                <span className="px-2 py-1 bg-rose-100 text-rose-800 rounded text-xs">
-                  Action: {actionFilter}
-                </span>
-              )}
-              {searchTerm && (
-                <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
-                  Search: "{searchTerm}"
-                </span>
-              )}
-            </div>
-            <button
-              onClick={onResetFilters}
-              className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium transition"
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-6 gap-4 mt-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Project
+            </label>
+            <select
+              value={filters.project}
+              onChange={(e) => onFilterChange("project", e.target.value)}
+              className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
             >
-              🗑️ Clear All Filters
-            </button>
+              <option value="all">All Projects</option>
+              {projects.map((project) => (
+                <option key={project} value={project}>
+                  {project}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Type
+            </label>
+            <select
+              value={filters.type}
+              onChange={(e) => onFilterChange("type", e.target.value)}
+              className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Types</option>
+              <option value="ir">IR Only</option>
+              <option value="cpr">CPR Only</option>
+              <option value="revision">Revisions Only</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Status
+            </label>
+            <select
+              value={filters.status}
+              onChange={(e) => onFilterChange("status", e.target.value)}
+              className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Status</option>
+              <option value="pending">Pending</option>
+              <option value="completed">Completed</option>
+              <option value="archived">Archived</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Date Range
+            </label>
+            <select
+              value={dateRange}
+              onChange={(e) => onDateRangeChange(e.target.value)}
+              className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Dates</option>
+              <option value="today">Today</option>
+              <option value="week">Last 7 Days</option>
+              <option value="month">Last 30 Days</option>
+              <option value="year">Last Year</option>
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              User
+            </label>
+            <select
+              value={selectedUser}
+              onChange={(e) => onUserChange(e.target.value)}
+              className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Users</option>
+              {users.map((user) => (
+                <option key={user.username} value={user.username}>
+                  {user.fullname || user.username}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-1">
+              Action
+            </label>
+            <select
+              value={actionFilter}
+              onChange={(e) => onActionChange(e.target.value)}
+              className="w-full p-2 border rounded-lg bg-white focus:ring-2 focus:ring-blue-500"
+            >
+              <option value="all">All Actions</option>
+              {actionOptions.map((action) => (
+                <option key={action} value={action}>
+                  Action {action}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
-      )}
-    </div>
-  );
-});
+
+        {/* Active Filters */}
+        {hasActiveFilters && (
+          <div className="mt-4 pt-4 border-t">
+            <div className="flex items-center justify-between flex-wrap gap-2">
+              <div className="text-sm text-gray-600 flex flex-wrap gap-2">
+                <span className="font-medium">Active filters:</span>
+                {filters.project !== "all" && (
+                  <span className="px-2 py-1 bg-blue-100 text-blue-800 rounded text-xs">
+                    Project: {filters.project}
+                  </span>
+                )}
+                {filters.type !== "all" && (
+                  <span className="px-2 py-1 bg-purple-100 text-purple-800 rounded text-xs">
+                    Type: {filters.type}
+                  </span>
+                )}
+                {filters.status !== "all" && (
+                  <span className="px-2 py-1 bg-green-100 text-green-800 rounded text-xs">
+                    Status: {filters.status}
+                  </span>
+                )}
+                {dateRange !== "all" && (
+                  <span className="px-2 py-1 bg-amber-100 text-amber-800 rounded text-xs">
+                    Date: {dateRange}
+                  </span>
+                )}
+                {selectedUser !== "all" && (
+                  <span className="px-2 py-1 bg-indigo-100 text-indigo-800 rounded text-xs">
+                    User: {selectedUser}
+                  </span>
+                )}
+                {actionFilter !== "all" && (
+                  <span className="px-2 py-1 bg-rose-100 text-rose-800 rounded text-xs">
+                    Action: {actionFilter}
+                  </span>
+                )}
+                {searchTerm && (
+                  <span className="px-2 py-1 bg-gray-100 text-gray-800 rounded text-xs">
+                    Search: "{searchTerm}"
+                  </span>
+                )}
+              </div>
+              <button
+                onClick={onResetFilters}
+                className="px-4 py-2 bg-red-100 hover:bg-red-200 text-red-700 rounded-lg text-sm font-medium transition"
+              >
+                🗑️ Clear All Filters
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    );
+  },
+);
 
 // مكون Empty State
 const EmptyState = memo(({ isFiltered, onReset, onNavigate, department }) => (
@@ -314,234 +332,297 @@ const EmptyState = memo(({ isFiltered, onReset, onNavigate, department }) => (
   </div>
 ));
 
-// مكون صف الجدول - مع إضافة عمود Action
-const RecordRow = memo(({ item, getStatusColor, getTypeColor, getStatusText, getItemTypeText }) => {
-  const statusColor = getStatusColor(item);
-  const typeColor = getTypeColor(item);
-  const statusText = getStatusText(item);
-  const typeText = getItemTypeText(item);
-  
-  // دمج IrAttach و SdAttach في مصفوفة واحدة
-  const allAttachments = [
-    ...(item.irAttach || []).map(tag => ({ type: 'ir', value: tag })),
-    ...(item.sdAttach || []).map(tag => ({ type: 'sd', value: tag }))
-  ];
+// مكون صف الجدول - مع إضافة عمود Action وأزرار Archive/Restore
+const RecordRow = memo(
+  ({
+    item,
+    getStatusColor,
+    getTypeColor,
+    getStatusText,
+    getItemTypeText,
+    onArchive,
+  }) => {
+    const statusColor = getStatusColor(item);
+    const typeColor = getTypeColor(item);
+    const statusText = getStatusText(item);
+    const typeText = getItemTypeText(item);
 
-  // قيمة Action (افتراضي "A" إذا لم توجد)
-  const actionValue = item.action || "";
+    // دمج IrAttach و SdAttach في مصفوفة واحدة
+    const allAttachments = [
+      ...(item.tags?.engineer || item.irAttach || []).map((tag) => ({
+        type: "ir",
+        value: tag,
+      })),
+      ...(item.tags?.sd || item.sdAttach || []).map((tag) => ({
+        type: "sd",
+        value: tag,
+      })),
+    ];
 
-  return (
-    <tr className="border-b hover:bg-gray-50 transition-colors">
-      <td className="p-4">
-        <div className="font-mono font-semibold text-gray-800">
-          {item.displayNumber}
-        </div>
-        <div className="flex gap-1 mt-1">
-          {item.isRevision && (
-            <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded">
-              Revision
-            </span>
-          )}
-          {item.isArchived && (
-            <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-800 rounded">
-              📁 Archived
-            </span>
-          )}
-        </div>
-      </td>
-      
-      <td className="p-4">
-        <div className="text-gray-700 font-medium line-clamp-2">
-          {item.desc || item.revNote || "No description"}
-        </div>
-        <div className="text-xs text-gray-500 mt-1">
-          {item.location && <span>📍 {item.location}</span>}
-          {item.floor && item.location && " • "}
-          {item.floor && <span>🏢 {item.floor}</span>}
-        </div>
-      </td>
-      
-      <td className="p-4">
-        <span className={`px-3 py-1.5 rounded-full text-xs font-medium ${typeColor}`}>
-          {typeText}
-        </span>
-        <div className="text-xs text-gray-500 mt-1">
-          👤 {item.user || "—"}
-        </div>
-      </td>
-      
-      <td className="p-4">
-        <div className="font-medium text-gray-800">{item.project}</div>
-      </td>
+    // قيمة Action (تعامل مع القيم الفارغة)
+    const getActionDisplay = (action) => {
+      if (!action || action === "") {
+        return { bg: "bg-gray-400", text: "⏳" };
+      }
+      switch (action) {
+        case "A":
+          return { bg: "bg-green-600", text: "A" };
+        case "B":
+          return { bg: "bg-blue-600", text: "B" };
+        case "C":
+          return { bg: "bg-amber-600", text: "C" };
+        default:
+          return { bg: "bg-red-600", text: action };
+      }
+    };
 
-      {/* عمود Action الجديد */}
-      <td className="p-4">
-        <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-white ${
-          actionValue === "" ? 'bg-gray-600' :
-          actionValue === 'A' ? 'bg-green-600' :
-          actionValue === 'B' ? 'bg-blue-600' :
-          actionValue === 'C' ? 'bg-amber-600' :
-          'bg-red-600'
-        }`}>
-          {actionValue}
-        </span>
-      </td>
-      
-      {/* عمود Attachments الموحد */}
-      <td className="p-4">
-        {allAttachments.length > 0 ? (
-          <div className="flex flex-wrap gap-1">
-            {allAttachments.map((attach, idx) => (
-              <span 
-                key={idx} 
-                className={`px-2 py-1 text-xs rounded-full ${
-                  attach.type === 'ir' 
-                    ? 'bg-blue-100 text-blue-800' 
-                    : 'bg-green-100 text-green-800'
-                }`}
-                title={attach.type === 'ir' ? 'IR Attachment' : 'SD Attachment'}
-              >
-                {attach.type === 'ir' ? '📎' : '📌'} {attach.value}
+    const actionValue = item.action || "";
+    const { bg: actionBg, text: actionText } = getActionDisplay(actionValue);
+
+    return (
+      <tr className="border-b hover:bg-gray-50 transition-colors">
+        <td className="p-4">
+          <div className="font-mono font-semibold text-gray-800">
+            {item.displayNumber}
+          </div>
+          <div className="flex gap-1 mt-1">
+            {item.isRevision && (
+              <span className="text-xs px-2 py-0.5 bg-purple-100 text-purple-800 rounded">
+                Revision
               </span>
-            ))}
+            )}
+            {item.isArchived && (
+              <span className="text-xs px-2 py-0.5 bg-gray-100 text-gray-800 rounded">
+                📁 Archived
+              </span>
+            )}
           </div>
-        ) : (
-          <span className="text-xs text-gray-400">—</span>
-        )}
-      </td>
-      
-      <td className="p-4">
-        <div className="text-gray-600 whitespace-pre-line">
-          {item.formattedDate}
-        </div>
-        {item.archivedAt && (
+        </td>
+
+        <td className="p-4">
+          <div className="text-gray-700 font-medium line-clamp-2">
+            {item.desc || item.revNote || "No description"}
+          </div>
           <div className="text-xs text-gray-500 mt-1">
-            📁 Archived: {formatShortDate(item.archivedAt)}
+            {item.location && <span>📍 {item.location}</span>}
+            {item.floor && item.location && " • "}
+            {item.floor && <span>🏢 {item.floor}</span>}
           </div>
-        )}
-      </td>
-      
-      <td className="p-4">
-        <span className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${statusColor}`}>
-          {item.isArchived ? "📁" : item.isDone ? "✅" : "⏳"} {statusText}
-        </span>
-        
-        {item.downloadedBy && (
-          <div className="mt-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
-            <span className="font-medium">📄 Downloaded by:</span> {item.downloadedBy}
+        </td>
+
+        <td className="p-4">
+          <span
+            className={`px-3 py-1.5 rounded-full text-xs font-medium ${typeColor}`}
+          >
+            {typeText}
+          </span>
+          <div className="text-xs text-gray-500 mt-1">
+            👤 {item.user || "—"}
           </div>
-        )}
-      </td>
-    </tr>
-  );
-});
+        </td>
+
+        <td className="p-4">
+          <div className="font-medium text-gray-800">{item.project}</div>
+        </td>
+
+        {/* عمود Action */}
+        <td className="p-4">
+          <span
+            className={`inline-flex items-center justify-center w-8 h-8 rounded-full font-bold text-white ${actionBg}`}
+          >
+            {actionText}
+          </span>
+        </td>
+
+        {/* عمود Attachments الموحد */}
+        <td className="p-4">
+          {allAttachments.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {allAttachments.map((attach, idx) => (
+                <span
+                  key={idx}
+                  className={`px-2 py-1 text-xs rounded-full ${
+                    attach.type === "ir"
+                      ? "bg-blue-100 text-blue-800"
+                      : "bg-green-100 text-green-800"
+                  }`}
+                  title={
+                    attach.type === "ir" ? "IR Attachment" : "SD Attachment"
+                  }
+                >
+                  {attach.type === "ir" ? "📎" : "📌"} {attach.value}
+                </span>
+              ))}
+            </div>
+          ) : (
+            <span className="text-xs text-gray-400">—</span>
+          )}
+        </td>
+
+        <td className="p-4">
+          <div className="text-gray-600 whitespace-pre-line">
+            {item.formattedDate}
+          </div>
+          {item.archivedAt && (
+            <div className="text-xs text-gray-500 mt-1">
+              📁 Archived: {formatShortDate(item.archivedAt)}
+            </div>
+          )}
+        </td>
+
+        <td className="p-4">
+          <div className="space-y-2">
+            <span
+              className={`px-3 py-1.5 rounded-full text-xs font-medium flex items-center gap-1 w-fit ${statusColor}`}
+            >
+              {item.isArchived ? "📁" : item.isDone ? "✅" : "⏳"} {statusText}
+            </span>
+
+            {item.downloadedBy && (
+              <div className="mt-2 text-xs text-gray-600 bg-gray-50 p-2 rounded">
+                <span className="font-medium">📄 Downloaded by:</span>{" "}
+                {item.downloadedBy}
+              </div>
+            )}
+
+            {/* أزرار Archive / Restore */}
+            <div className="flex gap-2 mt-2">
+              <button
+                onClick={() => onArchive(item)}
+                className="px-3 py-1 bg-amber-100 hover:bg-amber-200 text-amber-700 rounded text-xs font-medium transition"
+              >
+                📁 Archive
+              </button>
+            </div>
+          </div>
+        </td>
+      </tr>
+    );
+  },
+);
 
 // مكون الجدول الرئيسي
-const RecordsTable = memo(({ 
-  records, 
-  filteredRecords, 
-  department, 
-  user, 
-  getStatusColor, 
-  getTypeColor, 
-  getStatusText, 
-  getItemTypeText,
-  onResetFilters,
-  onNavigate
-}) => {
-  if (filteredRecords.length === 0) {
+const RecordsTable = memo(
+  ({
+    records,
+    filteredRecords,
+    department,
+    user,
+    getStatusColor,
+    getTypeColor,
+    getStatusText,
+    getItemTypeText,
+    onArchive,
+    onResetFilters,
+    onNavigate,
+  }) => {
+    if (filteredRecords.length === 0) {
+      return (
+        <EmptyState
+          isFiltered={records.length > 0}
+          onReset={onResetFilters}
+          onNavigate={onNavigate}
+          department={department}
+        />
+      );
+    }
+
     return (
-      <EmptyState 
-        isFiltered={records.length > 0}
-        onReset={onResetFilters}
-        onNavigate={onNavigate}
-        department={department}
-      />
+      <div className="bg-white rounded-2xl shadow-lg border overflow-hidden">
+        <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
+          <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+            <div>
+              <h2 className="text-2xl font-bold mb-2">
+                {department} Department - All Records
+              </h2>
+              <p className="text-blue-100">
+                Showing {filteredRecords.length} of {records.length} total
+                records
+                {records.filter((r) => r.isArchived).length > 0 && (
+                  <span className="ml-2 text-blue-200">
+                    ({records.filter((r) => r.isArchived).length} archived)
+                  </span>
+                )}
+              </p>
+            </div>
+            <div className="text-sm bg-white/20 px-3 py-1 rounded-full">
+              {user?.username}
+            </div>
+          </div>
+        </div>
+
+        <div className="overflow-x-auto">
+          <table className="w-full">
+            <thead>
+              <tr className="bg-gray-50 text-gray-700 border-b">
+                <th className="p-4 text-left font-semibold">ID / Number</th>
+                <th className="p-4 text-left font-semibold">Description</th>
+                <th className="p-4 text-left font-semibold">Type / User</th>
+                <th className="p-4 text-left font-semibold">Project</th>
+                <th className="p-4 text-left font-semibold">Action</th>
+                <th className="p-4 text-left font-semibold">Attachments</th>
+                <th className="p-4 text-left font-semibold">Date & Time</th>
+                <th className="p-4 text-left font-semibold">Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredRecords.map((item) => (
+                <RecordRow
+                  key={
+                    item.uniqueId ||
+                    item.id ||
+                    `${item.irNo || item.revNo}-${Math.random()}`
+                  }
+                  item={item}
+                  getStatusColor={getStatusColor}
+                  getTypeColor={getTypeColor}
+                  getStatusText={getStatusText}
+                  getItemTypeText={getItemTypeText}
+                  onArchive={onArchive}
+                />
+              ))}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Table Footer */}
+        <div className="bg-gray-50 px-6 py-4 border-t">
+          <div className="flex flex-col md:flex-row justify-between items-center gap-4">
+            <div className="text-sm text-gray-600">
+              Showing{" "}
+              <span className="font-medium">{filteredRecords.length}</span> of{" "}
+              <span className="font-medium">{records.length}</span> total
+              records
+            </div>
+            <div className="text-sm text-gray-500">
+              Last updated:{" "}
+              {new Date().toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })}
+            </div>
+          </div>
+        </div>
+      </div>
     );
-  }
-
-  return (
-    <div className="bg-white rounded-2xl shadow-lg border overflow-hidden">
-      <div className="bg-gradient-to-r from-blue-600 to-blue-700 text-white p-6">
-        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
-          <div>
-            <h2 className="text-2xl font-bold mb-2">{department} Department - All Records</h2>
-            <p className="text-blue-100">
-              Showing {filteredRecords.length} of {records.length} total records
-              {records.filter(r => r.isArchived).length > 0 && (
-                <span className="ml-2 text-blue-200">
-                  ({records.filter(r => r.isArchived).length} archived)
-                </span>
-              )}
-            </p>
-          </div>
-          <div className="text-sm bg-white/20 px-3 py-1 rounded-full">
-            {user?.username}
-          </div>
-        </div>
-      </div>
-
-      <div className="overflow-x-auto">
-        <table className="w-full">
-          <thead>
-            <tr className="bg-gray-50 text-gray-700 border-b">
-              { /* استخدام التعليقات لمنع أي مسافة بيضاء بين العناصر */ }
-              <th className="p-4 text-left font-semibold">ID / Number</th>
-              <th className="p-4 text-left font-semibold">Description</th>
-              <th className="p-4 text-left font-semibold">Type / User</th>
-              <th className="p-4 text-left font-semibold">Project</th>
-              <th className="p-4 text-left font-semibold">Action</th>
-              <th className="p-4 text-left font-semibold">Attachments</th>
-              <th className="p-4 text-left font-semibold">Date & Time</th>
-              <th className="p-4 text-left font-semibold">Status</th>
-            </tr>
-          </thead>
-          <tbody>
-            {filteredRecords.map((item, index) => (
-              <RecordRow
-                key={`${item.irNo || item.revNo}-${index}`}
-                item={item}
-                getStatusColor={getStatusColor}
-                getTypeColor={getTypeColor}
-                getStatusText={getStatusText}
-                getItemTypeText={getItemTypeText}
-              />
-            ))}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Table Footer */}
-      <div className="bg-gray-50 px-6 py-4 border-t">
-        <div className="flex flex-col md:flex-row justify-between items-center gap-4">
-          <div className="text-sm text-gray-600">
-            Showing <span className="font-medium">{filteredRecords.length}</span> of{" "}
-            <span className="font-medium">{records.length}</span> total records
-          </div>
-          <div className="text-sm text-gray-500">
-            Last updated: {new Date().toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-});
+  },
+);
 
 // ==================== المكون الرئيسي ====================
 export default function EngineerRecords() {
   const navigate = useNavigate();
-  
+
   // User info
   const [user, setUser] = useState(null);
   const [department, setDepartment] = useState("");
   const [departmentAbbr, setDepartmentAbbr] = useState("");
-  
+
   // Data states
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [toast, setToast] = useState({ show: false, message: "", type: "" });
-  
+
   // Filter states - موسعة مع إضافة actionFilter
   const [searchTerm, setSearchTerm] = useState("");
   const [debouncedSearch, setDebouncedSearch] = useState("");
@@ -553,12 +634,12 @@ export default function EngineerRecords() {
   const [dateRange, setDateRange] = useState("all");
   const [selectedUser, setSelectedUser] = useState("all");
   const [actionFilter, setActionFilter] = useState("all");
-  
+
   // Filter options
   const [projects, setProjects] = useState([]);
   const [users, setUsers] = useState([]);
-  const [actionOptions, setActionOptions] = useState(["","A", "B", "C", "D"]);
-  
+  const [actionOptions, setActionOptions] = useState(["", "A", "B", "C", "D"]);
+
   // Statistics
   const [stats, setStats] = useState({
     total: 0,
@@ -580,7 +661,7 @@ export default function EngineerRecords() {
       navigate("/login");
       return;
     }
-    
+
     setUser(savedUser);
     setDepartment(savedUser.department || "");
     setDepartmentAbbr(getDepartmentAbbr(savedUser.department || ""));
@@ -598,11 +679,11 @@ export default function EngineerRecords() {
     if (searchTimeoutRef.current) {
       clearTimeout(searchTimeoutRef.current);
     }
-    
+
     searchTimeoutRef.current = setTimeout(() => {
       setDebouncedSearch(searchTerm);
     }, 500);
-    
+
     return () => {
       if (searchTimeoutRef.current) {
         clearTimeout(searchTimeoutRef.current);
@@ -615,7 +696,14 @@ export default function EngineerRecords() {
     if (department) {
       loadAllRecords();
     }
-  }, [department, filters, debouncedSearch, dateRange, selectedUser, actionFilter]);
+  }, [
+    department,
+    filters,
+    debouncedSearch,
+    dateRange,
+    selectedUser,
+    actionFilter,
+  ]);
 
   // ===================== Toast Helper =====================
   const showToast = useCallback((message, type = "success") => {
@@ -629,7 +717,9 @@ export default function EngineerRecords() {
   // ===================== Load Filter Options =====================
   const loadFilterOptions = async () => {
     try {
-      const res = await fetch(`${API_URL}/engineer/filter-options?department=${encodeURIComponent(department)}`);
+      const res = await fetch(
+        `${API_URL}/engineer/filter-options?department=${encodeURIComponent(department)}`,
+      );
       if (res.ok) {
         const data = await res.json();
         setProjects(data.projects || []);
@@ -643,23 +733,25 @@ export default function EngineerRecords() {
   // ===================== Load ALL Records (Active + Archived) from unified endpoints =====================
   const loadAllRecords = async () => {
     if (!department) return;
-    
+
     setLoading(true);
     setError("");
 
     try {
       console.log("📡 Loading all records for department:", department);
-      
+
       const [irsRes, revsRes] = await Promise.all([
         fetch(`${API_URL}/irs/all`),
-        fetch(`${API_URL}/revs/all`)
+        fetch(`${API_URL}/revs/all`),
       ]);
 
       let irsList = [];
       if (irsRes.ok) {
         const data = await irsRes.json();
-        irsList = (data.irs || []).filter(ir => 
-          ir.department === department || getDepartmentAbbr(ir.department) === departmentAbbr
+        irsList = (data.irs || []).filter(
+          (ir) =>
+            ir.department === department ||
+            getDepartmentAbbr(ir.department) === departmentAbbr,
         );
         console.log(`✅ Loaded ${irsList.length} IRs (including archived)`);
       }
@@ -667,75 +759,84 @@ export default function EngineerRecords() {
       let revsList = [];
       if (revsRes.ok) {
         const data = await revsRes.json();
-        revsList = (data.revs || []).filter(rev => 
-          rev.department === department || getDepartmentAbbr(rev.department) === departmentAbbr
+        revsList = (data.revs || []).filter(
+          (rev) =>
+            rev.department === department ||
+            getDepartmentAbbr(rev.department) === departmentAbbr,
         );
-        console.log(`✅ Loaded ${revsList.length} Revisions (including archived)`);
+        console.log(
+          `✅ Loaded ${revsList.length} Revisions (including archived)`,
+        );
       }
 
+      // بناء القائمة النهائية بدون إزالة التكرارات (كل عنصر له uniqueId)
       const allRecords = [
-        ...irsList.map(ir => ({
+        ...irsList.map((ir) => ({
           ...ir,
+          uniqueId: ir.uniqueId || ir.id,
           isRevision: false,
-          source: 'irs',
+          source: "irs",
           displayNumber: ir.irNo,
-          itemType: ir.requestType === 'CPR' ? 'CPR' : 'IR',
+          itemType: ir.requestType === "CPR" ? "CPR" : "IR",
           formattedDate: formatDate(ir.sentAt || ir.createdAt || ir.archivedAt),
-          shortDate: formatShortDate(ir.sentAt || ir.createdAt || ir.archivedAt),
+          shortDate: formatShortDate(
+            ir.sentAt || ir.createdAt || ir.archivedAt,
+          ),
           irAttach: ir.tags?.engineer || [],
           sdAttach: ir.tags?.sd || [],
-          user: ir.user || 'Unknown',
+          user: ir.user || "Unknown",
           date: new Date(ir.sentAt || ir.createdAt || ir.archivedAt || 0),
-          action: ir.action || ''
+          action: ir.action || "",
         })),
-        ...revsList.map(rev => ({
+        ...revsList.map((rev) => ({
           ...rev,
+          uniqueId: rev.uniqueId || rev.id,
           isRevision: true,
-          source: 'revs',
+          source: "revs",
           displayNumber: rev.displayNumber || rev.revNo || rev.irNo,
-          itemType: 'REV',
-          formattedDate: formatDate(rev.sentAt || rev.createdAt || rev.archivedAt),
-          shortDate: formatShortDate(rev.sentAt || rev.createdAt || rev.archivedAt),
+          itemType: "REV",
+          formattedDate: formatDate(
+            rev.sentAt || rev.createdAt || rev.archivedAt,
+          ),
+          shortDate: formatShortDate(
+            rev.sentAt || rev.createdAt || rev.archivedAt,
+          ),
           irAttach: rev.tags?.engineer || [],
           sdAttach: rev.tags?.sd || [],
-          user: rev.user || 'Unknown',
+          user: rev.user || "Unknown",
           date: new Date(rev.sentAt || rev.createdAt || rev.archivedAt || 0),
-          action: rev.action || ''
-        }))
+          action: rev.action || "",
+        })),
       ];
 
-      console.log(`📊 Total records before deduplication: ${allRecords.length}`);
+      console.log(`📊 Total records: ${allRecords.length}`);
 
-      const uniqueRecords = [];
-      const seenIds = new Set();
-      
-      allRecords.forEach(record => {
-        const recordId = record.irNo || record.revNo;
-        if (!seenIds.has(recordId)) {
-          seenIds.add(recordId);
-          uniqueRecords.push(record);
-        }
-      });
+      // ترتيب حسب التاريخ (الأحدث أولاً)
+      allRecords.sort((a, b) => b.date - a.date);
 
-      console.log(`📊 Total unique records: ${uniqueRecords.length}`);
+      setRecords(allRecords);
 
-      uniqueRecords.sort((a, b) => b.date - a.date);
+      calculateStats(allRecords);
 
-      setRecords(uniqueRecords);
-      
-      calculateStats(uniqueRecords);
-      
-      const uniqueProjects = [...new Set(uniqueRecords.map(r => r.project).filter(Boolean))].sort();
+      const uniqueProjects = [
+        ...new Set(allRecords.map((r) => r.project).filter(Boolean)),
+      ].sort();
       setProjects(uniqueProjects);
-      
-      const uniqueUsers = [...new Set(uniqueRecords.map(r => r.user).filter(Boolean))].map(username => ({
-        username,
-        fullname: username
-      })).sort((a, b) => a.username.localeCompare(b.username));
+
+      const uniqueUsers = [
+        ...new Set(allRecords.map((r) => r.user).filter(Boolean)),
+      ]
+        .map((username) => ({
+          username,
+          fullname: username,
+        }))
+        .sort((a, b) => a.username.localeCompare(b.username));
       setUsers(uniqueUsers);
-      
-      showToast(`✅ Loaded ${uniqueRecords.length} records (${uniqueRecords.filter(r => r.isArchived).length} archived)`, "success");
-      
+
+      showToast(
+        `✅ Loaded ${allRecords.length} records (${allRecords.filter((r) => r.isArchived).length} archived)`,
+        "success",
+      );
     } catch (err) {
       console.error("Error loading records:", err);
       setError(err.message);
@@ -747,12 +848,20 @@ export default function EngineerRecords() {
 
   // ===================== Calculate Statistics =====================
   const calculateStats = (recordsList) => {
-    const pending = recordsList.filter(r => !r.isDone && !r.isArchived).length;
-    const completed = recordsList.filter(r => r.isDone && !r.isArchived).length;
-    const archived = recordsList.filter(r => r.isArchived).length;
-    const revisions = recordsList.filter(r => r.isRevision).length;
-    const cpr = recordsList.filter(r => !r.isRevision && (r.requestType === "CPR")).length;
-    const ir = recordsList.filter(r => !r.isRevision && r.requestType !== "CPR").length;
+    const pending = recordsList.filter(
+      (r) => !r.isDone && !r.isArchived,
+    ).length;
+    const completed = recordsList.filter(
+      (r) => r.isDone && !r.isArchived,
+    ).length;
+    const archived = recordsList.filter((r) => r.isArchived).length;
+    const revisions = recordsList.filter((r) => r.isRevision).length;
+    const cpr = recordsList.filter(
+      (r) => !r.isRevision && r.requestType === "CPR",
+    ).length;
+    const ir = recordsList.filter(
+      (r) => !r.isRevision && r.requestType !== "CPR",
+    ).length;
 
     setStats({
       total: recordsList.length,
@@ -770,7 +879,7 @@ export default function EngineerRecords() {
     if (!records || records.length === 0) {
       return [];
     }
-    
+
     const now = new Date();
     const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
     const weekAgo = new Date(today);
@@ -779,25 +888,46 @@ export default function EngineerRecords() {
     monthAgo.setMonth(today.getMonth() - 1);
     const yearAgo = new Date(today);
     yearAgo.setFullYear(today.getFullYear() - 1);
-    
-    return records.filter(record => {
-      if (filters.project !== "all" && record.project !== filters.project) return false;
+
+    return records.filter((record) => {
+      if (filters.project !== "all" && record.project !== filters.project)
+        return false;
 
       if (filters.type !== "all") {
-        if (filters.type === "ir" && (record.isRevision || record.requestType === "CPR")) return false;
-        if (filters.type === "cpr" && (!record.isCPR && record.requestType !== "CPR")) return false;
+        if (
+          filters.type === "ir" &&
+          (record.isRevision || record.requestType === "CPR")
+        )
+          return false;
+        if (
+          filters.type === "cpr" &&
+          !record.isCPR &&
+          record.requestType !== "CPR"
+        )
+          return false;
         if (filters.type === "revision" && !record.isRevision) return false;
       }
 
       if (filters.status !== "all") {
-        if (filters.status === "pending" && (record.isDone || record.isArchived)) return false;
-        if (filters.status === "completed" && (!record.isDone || record.isArchived)) return false;
+        if (
+          filters.status === "pending" &&
+          (record.isDone || record.isArchived)
+        )
+          return false;
+        if (
+          filters.status === "completed" &&
+          (!record.isDone || record.isArchived)
+        )
+          return false;
         if (filters.status === "archived" && !record.isArchived) return false;
       }
 
       if (selectedUser !== "all" && record.user !== selectedUser) return false;
 
-      if (actionFilter !== "all" && record.action !== actionFilter) return false;
+      if (actionFilter !== "all") {
+        const val = record.action || "";
+        if (val !== actionFilter) return false;
+      }
 
       if (dateRange !== "all") {
         const recordDate = record.date;
@@ -824,24 +954,35 @@ export default function EngineerRecords() {
         const project = (record.project || "").toLowerCase();
         const location = (record.location || "").toLowerCase();
         const user = (record.user || "").toLowerCase();
-        
-        if (!displayNumber.includes(term) && 
-            !desc.includes(term) && 
-            !project.includes(term) && 
-            !location.includes(term) &&
-            !user.includes(term)) {
+
+        if (
+          !displayNumber.includes(term) &&
+          !desc.includes(term) &&
+          !project.includes(term) &&
+          !location.includes(term) &&
+          !user.includes(term)
+        ) {
           return false;
         }
       }
 
       return true;
     });
-  }, [records, filters, debouncedSearch, dateRange, selectedUser, actionFilter]);
+  }, [
+    records,
+    filters,
+    debouncedSearch,
+    dateRange,
+    selectedUser,
+    actionFilter,
+  ]);
 
   // ===================== Style Helper Functions =====================
   const getStatusColor = useCallback((item) => {
-    if (item.isArchived) return "bg-gray-100 text-gray-800 border border-gray-300";
-    if (item.isDone) return "bg-emerald-100 text-emerald-800 border border-emerald-300";
+    if (item.isArchived)
+      return "bg-gray-100 text-gray-800 border border-gray-300";
+    if (item.isDone)
+      return "bg-emerald-100 text-emerald-800 border border-emerald-300";
     return "bg-yellow-100 text-yellow-800 border border-yellow-300";
   }, []);
 
@@ -872,7 +1013,7 @@ export default function EngineerRecords() {
   }, []);
 
   const handleFilterChange = useCallback((key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+    setFilters((prev) => ({ ...prev, [key]: value }));
   }, []);
 
   const handleDateRangeChange = useCallback((value) => {
@@ -903,11 +1044,48 @@ export default function EngineerRecords() {
   const handleRefresh = useCallback(() => {
     loadAllRecords();
     showToast("Data refreshed", "success");
-  }, [showToast]);
+  }, [loadAllRecords, showToast]);
 
   const handleNavigateToCreate = useCallback(() => {
     navigate("/engineer");
   }, [navigate]);
+
+  // ===================== Archive / Restore Handlers (باستخدام uniqueId) =====================
+  const handleArchive = useCallback(
+    async (item) => {
+      const uniqueId = item.uniqueId || item.id;
+      if (!uniqueId) {
+        showToast("❌ Item has no unique identifier", "error");
+        return;
+      }
+
+      if (!window.confirm(`Archive ${item.displayNumber}?`)) return;
+
+      try {
+        const res = await fetch(`${API_URL}/archive`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            uniqueId: uniqueId,
+            role: "engineer",
+            collection: item.isRevision ? "revs" : "irs",
+          }),
+        });
+
+        if (res.ok) {
+          showToast("✅ Item archived successfully!");
+          loadAllRecords(); // إعادة تحميل البيانات
+        } else {
+          const data = await res.json();
+          throw new Error(data.error || "Archive failed");
+        }
+      } catch (err) {
+        console.error("Archive error:", err);
+        showToast(`❌ Archive failed: ${err.message}`, "error");
+      }
+    },
+    [loadAllRecords, showToast],
+  );
 
   // Main render
   if (!user) {
@@ -919,13 +1097,13 @@ export default function EngineerRecords() {
   }
 
   const filteredList = filteredRecords();
-  const archivedCount = records.filter(r => r.isArchived).length;
-  
+  const archivedCount = records.filter((r) => r.isArchived).length;
+
   console.log("📊 Render stats:", {
     totalRecords: records.length,
     filteredCount: filteredList.length,
     archivedCount,
-    stats
+    stats,
   });
 
   return (
@@ -940,12 +1118,16 @@ export default function EngineerRecords() {
               📋 Department Records
             </h1>
             <p className="text-gray-600 mt-2">
-              Department: <span className="font-semibold text-blue-600">{department}</span>
+              Department:{" "}
+              <span className="font-semibold text-blue-600">{department}</span>
               <span className="mx-2">•</span>
-              User: <span className="font-semibold text-blue-600">{user?.username}</span>
+              User:{" "}
+              <span className="font-semibold text-blue-600">
+                {user?.username}
+              </span>
               <span className="mx-2">•</span>
               <span className="text-sm text-gray-500">
-                {records.length} total records 
+                {records.length} total records
                 {archivedCount > 0 && ` (${archivedCount} archived)`}
               </span>
             </p>
@@ -988,7 +1170,7 @@ export default function EngineerRecords() {
         )}
 
         <StatsCards stats={stats} />
-        
+
         <SearchAndFilters
           searchTerm={searchTerm}
           onSearchChange={handleSearchChange}
@@ -1006,7 +1188,7 @@ export default function EngineerRecords() {
           onActionChange={handleActionChange}
           actionOptions={actionOptions}
         />
-        
+
         <RecordsTable
           records={records}
           filteredRecords={filteredList}
@@ -1016,16 +1198,21 @@ export default function EngineerRecords() {
           getTypeColor={getTypeColor}
           getStatusText={getStatusText}
           getItemTypeText={getItemTypeText}
+          onArchive={handleArchive}
           onResetFilters={handleResetFilters}
           onNavigate={handleNavigateToCreate}
         />
 
         {/* Information Footer */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-4 text-center text-blue-700">
-          <p>Showing all records for {department} department • Active + Archived</p>
+          <p>
+            Showing all records for {department} department • Active + Archived
+          </p>
           <p className="text-sm text-blue-600 mt-1">
-            Sources: IRs ({records.filter(r => !r.isRevision && !r.isArchived).length}), 
-            Revisions ({records.filter(r => r.isRevision && !r.isArchived).length}), 
+            Sources: IRs (
+            {records.filter((r) => !r.isRevision && !r.isArchived).length}),
+            Revisions (
+            {records.filter((r) => r.isRevision && !r.isArchived).length}),
             Archived ({archivedCount})
           </p>
         </div>

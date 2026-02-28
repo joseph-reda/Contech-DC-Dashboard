@@ -1,4 +1,4 @@
-// src/pages/EngineerRecords.jsx - نسخة نهائية بدون عناصر مؤرشفة وبدون زر أرشفة
+// src/pages/EngineerRecords.jsx - نسخة نهائية مع تحميل تلقائي عند فتح الصفحة
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
@@ -647,12 +647,20 @@ export default function EngineerRecords() {
     };
   }, [searchTerm]);
 
-  // Load records when filters change
+  // 🔹 تحميل أولي للبيانات بمجرد أن يصبح القسم متاحاً
+  useEffect(() => {
+    if (department) {
+      console.log("🔄 Initial load for department:", department);
+      loadRecords();
+    }
+  }, [department]); // هذا هو التعديل الرئيسي
+
+  // تحميل البيانات عند تغيير أي فلتر (مع بقاء الشرط)
   useEffect(() => {
     if (department) {
       loadRecords();
     }
-  }, [department, filters, debouncedSearch, dateRange, selectedUser, actionFilter]);
+  }, [filters, debouncedSearch, dateRange, selectedUser, actionFilter]); // أزلنا department من هنا لتجنب التكرار
 
   // ===================== Toast Helper =====================
   const showToast = useCallback((message, type = "success") => {

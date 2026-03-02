@@ -82,10 +82,6 @@ function convertIRToExcelRow(ir) {
   
   // الترتيب المطلوب: SerialNumber | L | 0 | description | location | type | receivedDate
   return [
-    serialNumber,           // SerialNumber (الرقم الكامل)
-    "HYPERLINK",                    // 0 (ثابت)
-    "0",                    // 0 (ثابت)
-    "L",                    // L (ثابت)
     description,            // description
     location,               // location
     itemType,               // type (trio-c, cor-c, TRIO-CM, TRIO-C, CPR, IR, etc.)

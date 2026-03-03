@@ -1116,57 +1116,65 @@ export default function DcPage() {
     }, []);
 
     // Filter logic
-    const filteredIRs = useCallback(() => {
-        return irs.filter((ir) => {
-            if (filters.project !== "all" && ir.project !== filters.project)
+// Filter logic مع الترتيب التصاعدي (الأقدم أولاً)
+const filteredIRs = useCallback(() => {
+    let filtered = irs.filter((ir) => {
+        if (filters.project !== "all" && ir.project !== filters.project)
+            return false;
+        if (filters.type !== "all") {
+            if (filters.type === "ir" && (ir.isCPR || ir.isRevision)) return false;
+            if (filters.type === "cpr" && (!ir.isCPR || ir.isRevision))
                 return false;
-            if (filters.type !== "all") {
-                if (filters.type === "ir" && (ir.isCPR || ir.isRevision)) return false;
-                if (filters.type === "cpr" && (!ir.isCPR || ir.isRevision))
-                    return false;
-                if (filters.type === "revision" && !ir.isRevision) return false;
+            if (filters.type === "revision" && !ir.isRevision) return false;
+        }
+        if (filters.status !== "all") {
+            if (filters.status === "pending" && ir.isDone) return false;
+            if (filters.status === "completed" && !ir.isDone) return false;
+        }
+        if (filters.department !== "all") {
+            const dept = getDepartmentAbbr(ir.department);
+            if (dept !== filters.department) return false;
+        }
+        if (filters.dateRange !== "all") {
+            const itemDate = new Date(ir.sentAt || ir.receivedDate);
+            const today = new Date();
+            switch (filters.dateRange) {
+                case "today":
+                    if (itemDate.toDateString() !== today.toDateString()) return false;
+                    break;
+                case "week":
+                    const weekAgo = new Date(today);
+                    weekAgo.setDate(today.getDate() - 7);
+                    if (itemDate < weekAgo) return false;
+                    break;
+                case "month":
+                    const monthAgo = new Date(today);
+                    monthAgo.setMonth(today.getMonth() - 1);
+                    if (itemDate < monthAgo) return false;
+                    break;
             }
-            if (filters.status !== "all") {
-                if (filters.status === "pending" && ir.isDone) return false;
-                if (filters.status === "completed" && !ir.isDone) return false;
-            }
-            if (filters.department !== "all") {
-                const dept = getDepartmentAbbr(ir.department);
-                if (dept !== filters.department) return false;
-            }
-            if (filters.dateRange !== "all") {
-                const itemDate = new Date(ir.sentAt || ir.receivedDate);
-                const today = new Date();
-                switch (filters.dateRange) {
-                    case "today":
-                        if (itemDate.toDateString() !== today.toDateString()) return false;
-                        break;
-                    case "week":
-                        const weekAgo = new Date(today);
-                        weekAgo.setDate(today.getDate() - 7);
-                        if (itemDate < weekAgo) return false;
-                        break;
-                    case "month":
-                        const monthAgo = new Date(today);
-                        monthAgo.setMonth(today.getMonth() - 1);
-                        if (itemDate < monthAgo) return false;
-                        break;
-                }
-            }
-            if (searchTerm) {
-                const term = searchTerm.toLowerCase();
-                const fullNumber = (ir.irNo || "").toLowerCase();
-                return (
-                    fullNumber.includes(term) ||
-                    (ir.desc && ir.desc.toLowerCase().includes(term)) ||
-                    (ir.project && ir.project.toLowerCase().includes(term)) ||
-                    (ir.user && ir.user.toLowerCase().includes(term)) ||
-                    (ir.location && ir.location.toLowerCase().includes(term))
-                );
-            }
-            return true;
-        });
-    }, [irs, filters, searchTerm]);
+        }
+        if (searchTerm) {
+            const term = searchTerm.toLowerCase();
+            const fullNumber = (ir.irNo || "").toLowerCase();
+            return (
+                fullNumber.includes(term) ||
+                (ir.desc && ir.desc.toLowerCase().includes(term)) ||
+                (ir.project && ir.project.toLowerCase().includes(term)) ||
+                (ir.user && ir.user.toLowerCase().includes(term)) ||
+                (ir.location && ir.location.toLowerCase().includes(term))
+            );
+        }
+        return true;
+    });
+
+    // ترتيب تصاعدي (الأقدم أولاً)
+    return filtered.sort((a, b) => {
+        const dateA = new Date(a.sentAt || a.receivedDate || 0);
+        const dateB = new Date(b.sentAt || b.receivedDate || 0);
+        return dateA - dateB; // تاريخ أقدم ← رقم أصغر ← يظهر أولاً
+    });
+}, [irs, filters, searchTerm]);
 
     // ================== دوال جديدة لنسخ وأرشفة كل العناصر في قسم ==================
     const handleCopyAllInDept = useCallback(

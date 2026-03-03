@@ -1516,88 +1516,122 @@ const filteredIRs = useCallback(() => {
         [customNumbers, getTodayDateStr, markItemAsDone, showToast],
     );
 
-    const handleUpdateSerial = useCallback(
-        async (irNo, newValue, shouldSave = true) => {
-            if (!shouldSave) {
-                setCustomNumbers((prev) => ({ ...prev, [irNo]: newValue }));
-                customNumbersRef.current[irNo] = newValue;
-                return;
+  // src/pages/DcPage.jsx - تعديل دالة handleUpdateSerial
+const handleUpdateSerial = useCallback(
+    async (irNo, newValue, shouldSave = true) => {
+        if (!shouldSave) {
+            setCustomNumbers((prev) => ({ ...prev, [irNo]: newValue }));
+            customNumbersRef.current[irNo] = newValue;
+            return;
+        }
+        
+        const ir = irs.find((x) => x.irNo === irNo);
+        if (!ir || ir.isRevision) {
+            showToast("Cannot update revision numbers");
+            return;
+        }
+
+        // ✅ التأكد من وجود uniqueId
+        const uniqueId = ir.uniqueId || ir.id;
+        if (!uniqueId) {
+            showToast("❌ Item has no unique identifier", "error");
+            return;
+        }
+
+        const valueToSave = newValue || customNumbers[irNo] || customNumbersRef.current[irNo];
+        if (!valueToSave) {
+            showToast("Please enter a new IR number");
+            return;
+        }
+
+        // استخراج الرقم التسلسلي
+        let numericSerial;
+        const match = valueToSave.match(/\d+$/);
+        if (match) {
+            numericSerial = parseInt(match[0]);
+        } else {
+            showToast("IR must end with valid number (e.g., 001)");
+            return;
+        }
+
+        if (isNaN(numericSerial) || numericSerial < 1) {
+            showToast("IR must end with valid number (e.g., 001)");
+            return;
+        }
+
+        setSavingSerials((s) => ({ ...s, [irNo]: true }));
+
+        try {
+            const user = JSON.parse(localStorage.getItem("user") || "null");
+            
+            const res = await fetch(`${API_URL}/irs/update-ir-number`, {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({
+                    uniqueId: uniqueId,  // المعرف الفريد فقط
+                    irNo: irNo,          // للتوثيق فقط
+                    newSerial: numericSerial,
+                    role: user?.role || "dc",
+                    project: ir.project,
+                    department: ir.department,
+                    requestType: ir.requestType || "IR",
+                }),
+            });
+
+            const json = await parseJsonSafe(res);
+            if (!res.ok) throw new Error(json.error || "Failed to update IR number");
+
+            // إنشاء الرقم الجديد للعرض
+            const cleanProject = ir.project.replace(/ /g, "-").toUpperCase();
+            const deptCode = getDepartmentAbbr(ir.department);
+            let newIrNo;
+            
+            if (ir.requestType === "CPR" || ir.isCPR) {
+                newIrNo = `BADYA-CON-${cleanProject}-CPR-${numericSerial.toString().padStart(3, "0")}`;
+            } else {
+                newIrNo = `BADYA-CON-${cleanProject}-IR-${deptCode}-${numericSerial.toString().padStart(3, "0")}`;
             }
-            const ir = irs.find((x) => x.irNo === irNo);
-            if (!ir || ir.isRevision) {
-                showToast("Cannot update revision numbers");
-                return;
-            }
-            const valueToSave =
-                newValue || customNumbers[irNo] || customNumbersRef.current[irNo];
-            if (!valueToSave) {
-                showToast("Please enter a new IR number");
-                return;
-            }
-            const parts = valueToSave.split("-");
-            const lastPart = parts[parts.length - 1];
-            const numericSerial = parseInt(lastPart);
-            if (isNaN(numericSerial) || numericSerial < 1) {
-                showToast("IR must end with valid number (e.g., 001)");
-                return;
-            }
-            setSavingSerials((s) => ({ ...s, [irNo]: true }));
-            try {
-                const user = JSON.parse(localStorage.getItem("user") || "null");
-                const res = await fetch(`${API_URL}/irs/update-ir-number`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        uniqueId: ir.uniqueId || ir.id,
-                        irNo: irNo,
-                        newSerial: numericSerial,
-                        role: user?.role || "dc",
-                        project: ir.project,
-                        department: ir.department,
-                        requestType: ir.requestType || "IR",
-                    }),
-                });
-                const json = await parseJsonSafe(res);
-                if (!res.ok)
-                    throw new Error(json.error || "Failed to update IR number");
-                const cleanProject = ir.project.replace(/ /g, "-").toUpperCase();
-                const deptCode = getDepartmentAbbr(ir.department);
-                let newIrNo;
-                if (ir.requestType === "CPR" || ir.isCPR) {
-                    newIrNo = `BADYA-CON-${cleanProject}-CPR-${numericSerial.toString().padStart(3, "0")}`;
-                } else {
-                    newIrNo = `BADYA-CON-${cleanProject}-IR-${deptCode}-${numericSerial.toString().padStart(3, "0")}`;
-                }
-                setIRs((prev) =>
-                    prev.map((item) => {
-                        if ((item.uniqueId || item.id) === (ir.uniqueId || ir.id)) {
-                            return { ...item, irNo: newIrNo };
-                        }
-                        return item;
-                    }),
-                );
-                setCustomNumbers((prev) => {
-                    const newMap = { ...prev };
-                    delete newMap[irNo];
-                    newMap[newIrNo] = newIrNo;
-                    return newMap;
-                });
-                delete customNumbersRef.current[irNo];
-                customNumbersRef.current[newIrNo] = newIrNo;
-                showToast(`✅ IR number updated to ${newIrNo}`);
-            } catch (err) {
-                console.error("Update failed:", err);
-                showToast(`❌ Update failed: ${err.message}`);
-            } finally {
-                setSavingSerials((s) => {
-                    const map = { ...s };
-                    delete map[irNo];
-                    return map;
-                });
-            }
-        },
-        [irs, showToast],
-    );
+
+            // ✅ تحديث العنصر المحدد فقط باستخدام uniqueId
+            setIRs((prev) =>
+                prev.map((item) => {
+                    if ((item.uniqueId || item.id) === uniqueId) {
+                        return { 
+                            ...item, 
+                            irNo: newIrNo,
+                            serialNumber: numericSerial 
+                        };
+                    }
+                    return item;
+                }),
+            );
+
+            // تحديث custom numbers
+            setCustomNumbers((prev) => {
+                const newMap = { ...prev };
+                delete newMap[irNo];
+                newMap[newIrNo] = newIrNo;
+                return newMap;
+            });
+            
+            delete customNumbersRef.current[irNo];
+            customNumbersRef.current[newIrNo] = newIrNo;
+            
+            showToast(`✅ Serial number updated to ${numericSerial}`);
+
+        } catch (err) {
+            console.error("Update failed:", err);
+            showToast(`❌ Update failed: ${err.message}`);
+        } finally {
+            setSavingSerials((s) => {
+                const map = { ...s };
+                delete map[irNo];
+                return map;
+            });
+        }
+    },
+    [irs, showToast],
+);
 
     const projects = [
         ...new Set(irs.map((item) => item.project).filter(Boolean)),

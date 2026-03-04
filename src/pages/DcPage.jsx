@@ -1,4 +1,4 @@
-// src/pages/DcPage.jsx - النسخة النهائية مع دعم uniqueId وترتيب تصاعدي وتحديث تلقائي
+// src/pages/DcPage.jsx - النسخة النهائية مع استخدام uniqueId كمفتاح للقيم المؤقتة
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { copyRow, copyAllRows } from "../firebaseService";
 import { API_URL } from "../config";
@@ -127,7 +127,7 @@ const CPRTableRow = memo(
         typesMap,
     }) => {
         const inputRef = useRef(null);
-        const isLoading = isSaving[ir.irNo];
+        const isLoading = isSaving;
 
         const locationType =
             typesMap && ir.location ? typesMap[ir.location] : "CPR";
@@ -331,10 +331,9 @@ const CPRTableRow = memo(
     },
     (prevProps, nextProps) => {
         return (
-            prevProps.ir.irNo === nextProps.ir.irNo &&
+            prevProps.ir.uniqueId === nextProps.ir.uniqueId &&
             prevProps.customNumber === nextProps.customNumber &&
-            prevProps.isSaving[prevProps.ir.irNo] ===
-            nextProps.isSaving[nextProps.ir.irNo] &&
+            prevProps.isSaving === nextProps.isSaving &&
             prevProps.isDownloaded === nextProps.isDownloaded
         );
     },
@@ -356,7 +355,7 @@ const IRTableRow = memo(
         typesMap,
     }) => {
         const inputRef = useRef(null);
-        const isLoading = isSaving[ir.irNo];
+        const isLoading = isSaving;
 
         const locationType = typesMap && ir.location ? typesMap[ir.location] : "IR";
 
@@ -558,10 +557,9 @@ const IRTableRow = memo(
     },
     (prevProps, nextProps) => {
         return (
-            prevProps.ir.irNo === nextProps.ir.irNo &&
+            prevProps.ir.uniqueId === nextProps.ir.uniqueId &&
             prevProps.customNumber === nextProps.customNumber &&
-            prevProps.isSaving[prevProps.ir.irNo] ===
-            nextProps.isSaving[nextProps.ir.irNo] &&
+            prevProps.isSaving === nextProps.isSaving &&
             prevProps.isDownloaded === nextProps.isDownloaded
         );
     },
@@ -646,11 +644,7 @@ const ProjectSection = memo(
                             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
                                 {projectRevs.map((rev) => (
                                     <RevisionChip
-                                        key={
-                                            rev.uniqueId ||
-                                            rev.id ||
-                                            `${rev.irNo}-${rev.sentAt || ""}`
-                                        }
+                                        key={rev.uniqueId || rev.id}
                                         rev={rev}
                                         onMarkDone={onMarkRevDone}
                                         onArchive={onArchive}
@@ -748,8 +742,8 @@ const ProjectSection = memo(
                                                         <CPRTableRow
                                                             key={ir.uniqueId || ir.id}
                                                             ir={ir}
-                                                            customNumber={customNumbers[ir.irNo]}
-                                                            isSaving={savingSerials}
+                                                            customNumber={customNumbers[ir.uniqueId]}
+                                                            isSaving={savingSerials[ir.uniqueId]}
                                                             onUpdateSerial={onUpdateSerial}
                                                             onCopy={onCopy}
                                                             onDownloadWord={onDownloadWord}
@@ -859,8 +853,8 @@ const ProjectSection = memo(
                                                         <IRTableRow
                                                             key={ir.uniqueId || ir.id}
                                                             ir={ir}
-                                                            customNumber={customNumbers[ir.irNo]}
-                                                            isSaving={savingSerials}
+                                                            customNumber={customNumbers[ir.uniqueId]}
+                                                            isSaving={savingSerials[ir.uniqueId]}
                                                             onUpdateSerial={onUpdateSerial}
                                                             onCopy={onCopy}
                                                             onDownloadWord={onDownloadWord}
@@ -1047,14 +1041,10 @@ export default function DcPage() {
 
                 setIRs(merged);
 
-                const map = {};
-                merged.forEach((item) => {
-                    if (!item.isRevision && item.irNo) {
-                        map[item.irNo] = item.irNo;
-                    }
-                });
-                setCustomNumbers(map);
-                customNumbersRef.current = map;
+                // لا داعي لملء customNumbers هنا، سنتركها فارغة أو يمكن ملؤها بـ irNo كقيمة افتراضية
+                // لكن الأفضل تركها فارغة لأن المستخدم سيبدأ التعديل من القيمة الحالية
+                setCustomNumbers({});
+                customNumbersRef.current = {};
 
                 setError(null);
             } catch (err) {
@@ -1225,6 +1215,7 @@ export default function DcPage() {
 
             let successCount = 0;
             let failCount = 0;
+            const successfulIds = [];
 
             for (const item of nonArchivedItems) {
                 try {
@@ -1240,11 +1231,7 @@ export default function DcPage() {
 
                     if (res.ok) {
                         successCount++;
-                        setIRs((prev) =>
-                            prev.filter(
-                                (x) => (x.uniqueId || x.id) !== (item.uniqueId || item.id),
-                            ),
-                        );
+                        successfulIds.push(item.uniqueId || item.id);
                     } else {
                         failCount++;
                     }
@@ -1252,6 +1239,12 @@ export default function DcPage() {
                     console.error("Archive failed for item:", item.irNo, err);
                     failCount++;
                 }
+            }
+
+            if (successfulIds.length > 0) {
+                setIRs((prev) =>
+                    prev.filter((x) => !successfulIds.includes(x.uniqueId || x.id)),
+                );
             }
 
             showToast(
@@ -1283,12 +1276,7 @@ export default function DcPage() {
             const json = await parseJsonSafe(res);
             if (!res.ok) throw new Error(json.error || "Archive failed");
             setIRs(prev => prev.filter(x => (x.uniqueId || x.id) !== uniqueId));
-            setCustomNumbers(prev => {
-                const newMap = { ...prev };
-                delete newMap[item.irNo];
-                return newMap;
-            });
-            delete customNumbersRef.current[item.irNo];
+            // لا حاجة لتحديث customNumbers هنا لأن العنصر سيختفي
             showToast(`✅ ${itemName} archived successfully!`);
         } catch (err) {
             console.error("Archive failed:", err);
@@ -1427,14 +1415,13 @@ export default function DcPage() {
                     ),
                 );
                 if (newIrNo && newIrNo !== item.irNo) {
+                    // تحديث customNumbers لهذا العنصر فقط
                     setCustomNumbers((prev) => {
                         const newMap = { ...prev };
-                        delete newMap[item.irNo];
-                        newMap[newIrNo] = newIrNo;
+                        newMap[uniqueId] = newIrNo; // نخزن القيمة الجديدة
                         return newMap;
                     });
-                    delete customNumbersRef.current[item.irNo];
-                    customNumbersRef.current[newIrNo] = newIrNo;
+                    customNumbersRef.current[uniqueId] = newIrNo;
                 }
                 setDownloadedIRs((prev) => new Set([...prev, item.irNo]));
             } catch (err) {
@@ -1458,10 +1445,9 @@ export default function DcPage() {
                 showToast("Please login as DC user");
                 return;
             }
-            const customNumber =
-                customNumbers[ir.irNo] || customNumbersRef.current[ir.irNo];
-            const finalIR =
-                customNumber && customNumber.trim() !== "" ? customNumber : ir.irNo;
+            const uniqueId = ir.uniqueId || ir.id;
+            const customNumber = customNumbers[uniqueId] || customNumbersRef.current[uniqueId];
+            const finalIR = customNumber && customNumber.trim() !== "" ? customNumber : ir.irNo;
             try {
                 const payload = {
                     irNo: finalIR,
@@ -1515,15 +1501,9 @@ export default function DcPage() {
         [customNumbers, getTodayDateStr, markItemAsDone, showToast],
     );
 
-    // تحديث الرقم التسلسلي مع إعادة تحميل البيانات بعد النجاح
+    // تحديث الرقم التسلسلي مع استخدام uniqueId كمفتاح للقيم المؤقتة
     const handleUpdateSerial = useCallback(
         async (irNo, newValue, shouldSave = true) => {
-            if (!shouldSave) {
-                setCustomNumbers((prev) => ({ ...prev, [irNo]: newValue }));
-                customNumbersRef.current[irNo] = newValue;
-                return;
-            }
-            
             const ir = irs.find((x) => x.irNo === irNo);
             if (!ir || ir.isRevision) {
                 showToast("Cannot update revision numbers");
@@ -1536,12 +1516,19 @@ export default function DcPage() {
                 return;
             }
 
-            const valueToSave = newValue || customNumbers[irNo] || customNumbersRef.current[irNo];
+            if (!shouldSave) {
+                setCustomNumbers((prev) => ({ ...prev, [uniqueId]: newValue }));
+                customNumbersRef.current[uniqueId] = newValue;
+                return;
+            }
+            
+            const valueToSave = newValue || customNumbers[uniqueId] || customNumbersRef.current[uniqueId];
             if (!valueToSave) {
                 showToast("Please enter a new IR number");
                 return;
             }
 
+            // استخراج الرقم التسلسلي
             let numericSerial;
             const match = valueToSave.match(/\d+$/);
             if (match) {
@@ -1556,7 +1543,7 @@ export default function DcPage() {
                 return;
             }
 
-            setSavingSerials((s) => ({ ...s, [irNo]: true }));
+            setSavingSerials((s) => ({ ...s, [uniqueId]: true }));
 
             try {
                 const user = JSON.parse(localStorage.getItem("user") || "null");
@@ -1588,7 +1575,7 @@ export default function DcPage() {
                     newIrNo = `BADYA-CON-${cleanProject}-IR-${deptCode}-${numericSerial.toString().padStart(3, "0")}`;
                 }
 
-                // تحديث العنصر المحدد
+                // تحديث العنصر المحدد فقط
                 setIRs((prev) =>
                     prev.map((item) => {
                         if ((item.uniqueId || item.id) === uniqueId) {
@@ -1602,16 +1589,14 @@ export default function DcPage() {
                     }),
                 );
 
-                // تحديث custom numbers
+                // تحديث custom numbers لهذا العنصر فقط (نفس uniqueId)
                 setCustomNumbers((prev) => {
                     const newMap = { ...prev };
-                    delete newMap[irNo];
-                    newMap[newIrNo] = newIrNo;
+                    newMap[uniqueId] = newIrNo; // نخزن القيمة الجديدة
                     return newMap;
                 });
                 
-                delete customNumbersRef.current[irNo];
-                customNumbersRef.current[newIrNo] = newIrNo;
+                customNumbersRef.current[uniqueId] = newIrNo;
                 
                 showToast(`✅ Serial number updated to ${numericSerial}`);
 
@@ -1626,7 +1611,7 @@ export default function DcPage() {
             } finally {
                 setSavingSerials((s) => {
                     const map = { ...s };
-                    delete map[irNo];
+                    delete map[uniqueId];
                     return map;
                 });
             }

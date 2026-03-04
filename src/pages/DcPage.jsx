@@ -1,4 +1,4 @@
-// src/pages/DcPage.jsx - النسخة النهائية مع دعم uniqueId لكل عملية
+// src/pages/DcPage.jsx - النسخة النهائية مع دعم uniqueId وترتيب تصاعدي وتحديث تلقائي
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { copyRow, copyAllRows } from "../firebaseService";
 import { API_URL } from "../config";
@@ -90,7 +90,7 @@ const RevisionChip = memo(({ rev, onMarkDone, onArchive }) => {
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
-                            onMarkDone(rev); // تمرير الكائن الكامل
+                            onMarkDone(rev);
                         }}
                         className="px-3 py-1.5 text-xs bg-gray-800 hover:bg-black text-white rounded-lg transition flex-1"
                     >
@@ -100,7 +100,7 @@ const RevisionChip = memo(({ rev, onMarkDone, onArchive }) => {
                 <button
                     onClick={(e) => {
                         e.stopPropagation();
-                        onArchive(rev); // تمرير الكائن الكامل
+                        onArchive(rev);
                     }}
                     className="px-3 py-1.5 text-xs bg-rose-600 hover:bg-rose-700 text-white rounded-lg transition flex-1"
                 >
@@ -111,7 +111,7 @@ const RevisionChip = memo(({ rev, onMarkDone, onArchive }) => {
     );
 });
 
-// ==================== CPRTableRow Component (خاص بـ CPR) - بدون عمود Action ====================
+// ==================== CPRTableRow Component ====================
 const CPRTableRow = memo(
     ({
         ir,
@@ -319,7 +319,7 @@ const CPRTableRow = memo(
                             </button>
                         </div>
                         <button
-                            onClick={() => onArchive(ir)} // تمرير الكائن الكامل
+                            onClick={() => onArchive(ir)}
                             className="w-full px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm flex items-center justify-center gap-1 shadow-sm transition"
                         >
                             <span>📁</span> Archive
@@ -340,7 +340,7 @@ const CPRTableRow = memo(
     },
 );
 
-// ==================== IRTableRow Component (خاص بـ IR) - بدون عمود Action ====================
+// ==================== IRTableRow Component ====================
 const IRTableRow = memo(
     ({
         ir,
@@ -546,7 +546,7 @@ const IRTableRow = memo(
                             </button>
                         </div>
                         <button
-                            onClick={() => onArchive(ir)} // تمرير الكائن الكامل
+                            onClick={() => onArchive(ir)}
                             className="w-full px-3 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg text-sm flex items-center justify-center gap-1 shadow-sm transition"
                         >
                             <span>📁</span> Archive
@@ -567,7 +567,7 @@ const IRTableRow = memo(
     },
 );
 
-// ==================== ProjectSection Component (معدل بإضافة أزرار لكل قسم) ====================
+// ==================== ProjectSection Component ====================
 const ProjectSection = memo(
     ({
         project,
@@ -579,15 +579,14 @@ const ProjectSection = memo(
         onDownloadWord,
         onArchive,
         onMarkRevDone,
-        onCopyAll, // still used for the project-level button
-        onCopyAllInDept, // new prop for department-level copy all
-        onArchiveAllInDept, // new prop for department-level archive all
+        onCopyAll,
+        onCopyAllInDept,
+        onArchiveAllInDept,
         downloadedIRs,
         getTypeClass,
         getStatusClass,
         typesMap,
     }) => {
-        // تجميع كل العناصر حسب نوعها
         const allItems = Object.values(depts).flat();
         const projectRevs = allItems.filter((x) => x.isRevision);
         const projectCPRs = allItems.filter(
@@ -597,7 +596,6 @@ const ProjectSection = memo(
             (x) => !x.isRevision && !x.isCPR && x.requestType !== "CPR",
         );
 
-        // ترتيب الأقسام
         const sortedDepts = Object.keys(depts).sort();
 
         return (
@@ -626,7 +624,6 @@ const ProjectSection = memo(
                                 </span>
                             </div>
                         </div>
-                        {/* زر نسخ كل IRs في المشروع (يبقى كما هو) */}
                         <div className="flex gap-2">
                             <button
                                 onClick={() =>
@@ -641,7 +638,6 @@ const ProjectSection = memo(
                 </div>
 
                 <div className="p-6 space-y-8">
-                    {/* REV Chips */}
                     {projectRevs.length > 0 && (
                         <div className="bg-amber-50 border border-amber-200 rounded-xl p-4">
                             <h3 className="font-bold text-amber-800 mb-3 flex items-center gap-2">
@@ -664,7 +660,6 @@ const ProjectSection = memo(
                         </div>
                     )}
 
-                    {/* CPR Section */}
                     {projectCPRs.length > 0 && (
                         <div className="space-y-6">
                             <div className="flex items-center justify-between border-b border-green-200 pb-2">
@@ -677,7 +672,6 @@ const ProjectSection = memo(
                                         ({projectCPRs.length} items)
                                     </span>
                                 </h3>
-                                {/* زر نسخ كل CPRs في المشروع */}
                                 <button
                                     onClick={() => onCopyAll(projectCPRs)}
                                     className="px-3 py-1.5 bg-green-600 hover:bg-green-700 text-white rounded-lg text-sm transition"
@@ -777,7 +771,6 @@ const ProjectSection = memo(
                         </div>
                     )}
 
-                    {/* IR Section */}
                     {projectIRs.length > 0 && (
                         <div className="space-y-6">
                             <div className="flex items-center justify-between border-b border-blue-200 pb-2">
@@ -965,7 +958,7 @@ export default function DcPage() {
         return {};
     }, []);
 
-    // Load all data (only non-archived items)
+    // Load all data (only non-archived items) with sorting by date ascending (oldest first)
     const loadAllData = useCallback(
         async (preserveScroll = true) => {
             setLoading(true);
@@ -1005,7 +998,7 @@ export default function DcPage() {
                 // Normalize IRs
                 const normalizedIrs = listIrs.map((ir) => ({
                     ...ir,
-                    uniqueId: ir.uniqueId || ir.id, // ضمان وجود uniqueId
+                    uniqueId: ir.uniqueId || ir.id,
                     isRevision: false,
                     isCPR: ir.requestType === "CPR",
                     floor: ir.floor || "",
@@ -1044,7 +1037,14 @@ export default function DcPage() {
                     projectTypesMap: typesMapData[rev.project] || {},
                 }));
 
+                // دمج وترتيب تصاعدي حسب تاريخ الإرسال (الأقدم أولاً)
                 const merged = [...normalizedIrs, ...normalizedRevs];
+                merged.sort((a, b) => {
+                    const dateA = new Date(a.sentAt || a.receivedDate || 0);
+                    const dateB = new Date(b.sentAt || b.receivedDate || 0);
+                    return dateA - dateB;
+                });
+
                 setIRs(merged);
 
                 const map = {};
@@ -1115,68 +1115,67 @@ export default function DcPage() {
             .replace(/ /g, " ");
     }, []);
 
-    // Filter logic
-// Filter logic مع الترتيب التصاعدي (الأقدم أولاً)
-const filteredIRs = useCallback(() => {
-    let filtered = irs.filter((ir) => {
-        if (filters.project !== "all" && ir.project !== filters.project)
-            return false;
-        if (filters.type !== "all") {
-            if (filters.type === "ir" && (ir.isCPR || ir.isRevision)) return false;
-            if (filters.type === "cpr" && (!ir.isCPR || ir.isRevision))
+    // Filter logic with ascending order (oldest first)
+    const filteredIRs = useCallback(() => {
+        let filtered = irs.filter((ir) => {
+            if (filters.project !== "all" && ir.project !== filters.project)
                 return false;
-            if (filters.type === "revision" && !ir.isRevision) return false;
-        }
-        if (filters.status !== "all") {
-            if (filters.status === "pending" && ir.isDone) return false;
-            if (filters.status === "completed" && !ir.isDone) return false;
-        }
-        if (filters.department !== "all") {
-            const dept = getDepartmentAbbr(ir.department);
-            if (dept !== filters.department) return false;
-        }
-        if (filters.dateRange !== "all") {
-            const itemDate = new Date(ir.sentAt || ir.receivedDate);
-            const today = new Date();
-            switch (filters.dateRange) {
-                case "today":
-                    if (itemDate.toDateString() !== today.toDateString()) return false;
-                    break;
-                case "week":
-                    const weekAgo = new Date(today);
-                    weekAgo.setDate(today.getDate() - 7);
-                    if (itemDate < weekAgo) return false;
-                    break;
-                case "month":
-                    const monthAgo = new Date(today);
-                    monthAgo.setMonth(today.getMonth() - 1);
-                    if (itemDate < monthAgo) return false;
-                    break;
+            if (filters.type !== "all") {
+                if (filters.type === "ir" && (ir.isCPR || ir.isRevision)) return false;
+                if (filters.type === "cpr" && (!ir.isCPR || ir.isRevision))
+                    return false;
+                if (filters.type === "revision" && !ir.isRevision) return false;
             }
-        }
-        if (searchTerm) {
-            const term = searchTerm.toLowerCase();
-            const fullNumber = (ir.irNo || "").toLowerCase();
-            return (
-                fullNumber.includes(term) ||
-                (ir.desc && ir.desc.toLowerCase().includes(term)) ||
-                (ir.project && ir.project.toLowerCase().includes(term)) ||
-                (ir.user && ir.user.toLowerCase().includes(term)) ||
-                (ir.location && ir.location.toLowerCase().includes(term))
-            );
-        }
-        return true;
-    });
+            if (filters.status !== "all") {
+                if (filters.status === "pending" && ir.isDone) return false;
+                if (filters.status === "completed" && !ir.isDone) return false;
+            }
+            if (filters.department !== "all") {
+                const dept = getDepartmentAbbr(ir.department);
+                if (dept !== filters.department) return false;
+            }
+            if (filters.dateRange !== "all") {
+                const itemDate = new Date(ir.sentAt || ir.receivedDate);
+                const today = new Date();
+                switch (filters.dateRange) {
+                    case "today":
+                        if (itemDate.toDateString() !== today.toDateString()) return false;
+                        break;
+                    case "week":
+                        const weekAgo = new Date(today);
+                        weekAgo.setDate(today.getDate() - 7);
+                        if (itemDate < weekAgo) return false;
+                        break;
+                    case "month":
+                        const monthAgo = new Date(today);
+                        monthAgo.setMonth(today.getMonth() - 1);
+                        if (itemDate < monthAgo) return false;
+                        break;
+                }
+            }
+            if (searchTerm) {
+                const term = searchTerm.toLowerCase();
+                const fullNumber = (ir.irNo || "").toLowerCase();
+                return (
+                    fullNumber.includes(term) ||
+                    (ir.desc && ir.desc.toLowerCase().includes(term)) ||
+                    (ir.project && ir.project.toLowerCase().includes(term)) ||
+                    (ir.user && ir.user.toLowerCase().includes(term)) ||
+                    (ir.location && ir.location.toLowerCase().includes(term))
+                );
+            }
+            return true;
+        });
 
-    // ترتيب تصاعدي (الأقدم أولاً)
-    return filtered.sort((a, b) => {
-        const dateA = new Date(a.sentAt || a.receivedDate || 0);
-        const dateB = new Date(b.sentAt || b.receivedDate || 0);
-        return dateA - dateB; // تاريخ أقدم ← رقم أصغر ← يظهر أولاً
-    });
-}, [irs, filters, searchTerm]);
+        // ترتيب تصاعدي (الأقدم أولاً)
+        return filtered.sort((a, b) => {
+            const dateA = new Date(a.sentAt || a.receivedDate || 0);
+            const dateB = new Date(b.sentAt || b.receivedDate || 0);
+            return dateA - dateB;
+        });
+    }, [irs, filters, searchTerm]);
 
-    // ================== دوال جديدة لنسخ وأرشفة كل العناصر في قسم ==================
+    // ================== دوال نسخ وأرشفة كل العناصر في قسم ==================
     const handleCopyAllInDept = useCallback(
         async (items, deptName) => {
             const nonRevisionItems = items.filter((item) => !item.isRevision);
@@ -1516,122 +1515,124 @@ const filteredIRs = useCallback(() => {
         [customNumbers, getTodayDateStr, markItemAsDone, showToast],
     );
 
-  // src/pages/DcPage.jsx - تعديل دالة handleUpdateSerial
-const handleUpdateSerial = useCallback(
-    async (irNo, newValue, shouldSave = true) => {
-        if (!shouldSave) {
-            setCustomNumbers((prev) => ({ ...prev, [irNo]: newValue }));
-            customNumbersRef.current[irNo] = newValue;
-            return;
-        }
-        
-        const ir = irs.find((x) => x.irNo === irNo);
-        if (!ir || ir.isRevision) {
-            showToast("Cannot update revision numbers");
-            return;
-        }
-
-        // ✅ التأكد من وجود uniqueId
-        const uniqueId = ir.uniqueId || ir.id;
-        if (!uniqueId) {
-            showToast("❌ Item has no unique identifier", "error");
-            return;
-        }
-
-        const valueToSave = newValue || customNumbers[irNo] || customNumbersRef.current[irNo];
-        if (!valueToSave) {
-            showToast("Please enter a new IR number");
-            return;
-        }
-
-        // استخراج الرقم التسلسلي
-        let numericSerial;
-        const match = valueToSave.match(/\d+$/);
-        if (match) {
-            numericSerial = parseInt(match[0]);
-        } else {
-            showToast("IR must end with valid number (e.g., 001)");
-            return;
-        }
-
-        if (isNaN(numericSerial) || numericSerial < 1) {
-            showToast("IR must end with valid number (e.g., 001)");
-            return;
-        }
-
-        setSavingSerials((s) => ({ ...s, [irNo]: true }));
-
-        try {
-            const user = JSON.parse(localStorage.getItem("user") || "null");
+    // تحديث الرقم التسلسلي مع إعادة تحميل البيانات بعد النجاح
+    const handleUpdateSerial = useCallback(
+        async (irNo, newValue, shouldSave = true) => {
+            if (!shouldSave) {
+                setCustomNumbers((prev) => ({ ...prev, [irNo]: newValue }));
+                customNumbersRef.current[irNo] = newValue;
+                return;
+            }
             
-            const res = await fetch(`${API_URL}/irs/update-ir-number`, {
-                method: "POST",
-                headers: { "Content-Type": "application/json" },
-                body: JSON.stringify({
-                    uniqueId: uniqueId,  // المعرف الفريد فقط
-                    irNo: irNo,          // للتوثيق فقط
-                    newSerial: numericSerial,
-                    role: user?.role || "dc",
-                    project: ir.project,
-                    department: ir.department,
-                    requestType: ir.requestType || "IR",
-                }),
-            });
-
-            const json = await parseJsonSafe(res);
-            if (!res.ok) throw new Error(json.error || "Failed to update IR number");
-
-            // إنشاء الرقم الجديد للعرض
-            const cleanProject = ir.project.replace(/ /g, "-").toUpperCase();
-            const deptCode = getDepartmentAbbr(ir.department);
-            let newIrNo;
-            
-            if (ir.requestType === "CPR" || ir.isCPR) {
-                newIrNo = `BADYA-CON-${cleanProject}-CPR-${numericSerial.toString().padStart(3, "0")}`;
-            } else {
-                newIrNo = `BADYA-CON-${cleanProject}-IR-${deptCode}-${numericSerial.toString().padStart(3, "0")}`;
+            const ir = irs.find((x) => x.irNo === irNo);
+            if (!ir || ir.isRevision) {
+                showToast("Cannot update revision numbers");
+                return;
             }
 
-            // ✅ تحديث العنصر المحدد فقط باستخدام uniqueId
-            setIRs((prev) =>
-                prev.map((item) => {
-                    if ((item.uniqueId || item.id) === uniqueId) {
-                        return { 
-                            ...item, 
-                            irNo: newIrNo,
-                            serialNumber: numericSerial 
-                        };
-                    }
-                    return item;
-                }),
-            );
+            const uniqueId = ir.uniqueId || ir.id;
+            if (!uniqueId) {
+                showToast("❌ Item has no unique identifier", "error");
+                return;
+            }
 
-            // تحديث custom numbers
-            setCustomNumbers((prev) => {
-                const newMap = { ...prev };
-                delete newMap[irNo];
-                newMap[newIrNo] = newIrNo;
-                return newMap;
-            });
-            
-            delete customNumbersRef.current[irNo];
-            customNumbersRef.current[newIrNo] = newIrNo;
-            
-            showToast(`✅ Serial number updated to ${numericSerial}`);
+            const valueToSave = newValue || customNumbers[irNo] || customNumbersRef.current[irNo];
+            if (!valueToSave) {
+                showToast("Please enter a new IR number");
+                return;
+            }
 
-        } catch (err) {
-            console.error("Update failed:", err);
-            showToast(`❌ Update failed: ${err.message}`);
-        } finally {
-            setSavingSerials((s) => {
-                const map = { ...s };
-                delete map[irNo];
-                return map;
-            });
-        }
-    },
-    [irs, showToast],
-);
+            let numericSerial;
+            const match = valueToSave.match(/\d+$/);
+            if (match) {
+                numericSerial = parseInt(match[0]);
+            } else {
+                showToast("IR must end with valid number (e.g., 001)");
+                return;
+            }
+
+            if (isNaN(numericSerial) || numericSerial < 1) {
+                showToast("IR must end with valid number (e.g., 001)");
+                return;
+            }
+
+            setSavingSerials((s) => ({ ...s, [irNo]: true }));
+
+            try {
+                const user = JSON.parse(localStorage.getItem("user") || "null");
+                
+                const res = await fetch(`${API_URL}/irs/update-ir-number`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        uniqueId: uniqueId,
+                        irNo: irNo,
+                        newSerial: numericSerial,
+                        role: user?.role || "dc",
+                        project: ir.project,
+                        department: ir.department,
+                        requestType: ir.requestType || "IR",
+                    }),
+                });
+
+                const json = await parseJsonSafe(res);
+                if (!res.ok) throw new Error(json.error || "Failed to update IR number");
+
+                const cleanProject = ir.project.replace(/ /g, "-").toUpperCase();
+                const deptCode = getDepartmentAbbr(ir.department);
+                let newIrNo;
+                
+                if (ir.requestType === "CPR" || ir.isCPR) {
+                    newIrNo = `BADYA-CON-${cleanProject}-CPR-${numericSerial.toString().padStart(3, "0")}`;
+                } else {
+                    newIrNo = `BADYA-CON-${cleanProject}-IR-${deptCode}-${numericSerial.toString().padStart(3, "0")}`;
+                }
+
+                // تحديث العنصر المحدد
+                setIRs((prev) =>
+                    prev.map((item) => {
+                        if ((item.uniqueId || item.id) === uniqueId) {
+                            return { 
+                                ...item, 
+                                irNo: newIrNo,
+                                serialNumber: numericSerial 
+                            };
+                        }
+                        return item;
+                    }),
+                );
+
+                // تحديث custom numbers
+                setCustomNumbers((prev) => {
+                    const newMap = { ...prev };
+                    delete newMap[irNo];
+                    newMap[newIrNo] = newIrNo;
+                    return newMap;
+                });
+                
+                delete customNumbersRef.current[irNo];
+                customNumbersRef.current[newIrNo] = newIrNo;
+                
+                showToast(`✅ Serial number updated to ${numericSerial}`);
+
+                // إعادة تحميل البيانات بعد التحديث لضمان المزامنة مع السيرفر
+                setTimeout(() => {
+                    loadAllData(true);
+                }, 500);
+
+            } catch (err) {
+                console.error("Update failed:", err);
+                showToast(`❌ Update failed: ${err.message}`);
+            } finally {
+                setSavingSerials((s) => {
+                    const map = { ...s };
+                    delete map[irNo];
+                    return map;
+                });
+            }
+        },
+        [irs, showToast, loadAllData],
+    );
 
     const projects = [
         ...new Set(irs.map((item) => item.project).filter(Boolean)),

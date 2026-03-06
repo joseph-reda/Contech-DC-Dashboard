@@ -1,4 +1,4 @@
-// src/pages/EngineerRecords.jsx - نسخة نهائية مع تحميل تلقائي عند فتح الصفحة
+// src/pages/EngineerRecords.jsx - نسخة نهائية مع عرض جميع السجلات (بما فيها المؤرشفة)
 import { useEffect, useState, useCallback, memo, useRef } from "react";
 import { useNavigate } from "react-router-dom";
 import { API_URL } from "../config";
@@ -51,7 +51,7 @@ const LoadingScreen = memo(() => (
   </div>
 ));
 
-// مكون Stats Cards (بدون archived)
+// مكون Stats Cards (يشمل جميع السجلات)
 const StatsCards = memo(({ stats }) => (
   <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-4 mb-6">
     <div className="bg-white rounded-xl shadow p-4 text-center">
@@ -81,7 +81,7 @@ const StatsCards = memo(({ stats }) => (
   </div>
 ));
 
-// مكون Search And Filters (بدون خيار Archived في حالة Status)
+// مكون Search And Filters (بدون خيار Archived في Status)
 const SearchAndFilters = memo(
   ({
     searchTerm,
@@ -597,7 +597,7 @@ export default function EngineerRecords() {
   const [users, setUsers] = useState([]);
   const [actionOptions, setActionOptions] = useState(["", "A", "B", "C", "D"]);
 
-  // Statistics (بدون archived)
+  // Statistics
   const [stats, setStats] = useState({
     total: 0,
     pending: 0,
@@ -647,20 +647,12 @@ export default function EngineerRecords() {
     };
   }, [searchTerm]);
 
-  // 🔹 تحميل أولي للبيانات بمجرد أن يصبح القسم متاحاً
-  useEffect(() => {
-    if (department) {
-      console.log("🔄 Initial load for department:", department);
-      loadRecords();
-    }
-  }, [department]); // هذا هو التعديل الرئيسي
-
-  // تحميل البيانات عند تغيير أي فلتر (مع بقاء الشرط)
+  // Load records when department or filters change
   useEffect(() => {
     if (department) {
       loadRecords();
     }
-  }, [filters, debouncedSearch, dateRange, selectedUser, actionFilter]); // أزلنا department من هنا لتجنب التكرار
+  }, [department, filters, debouncedSearch, dateRange, selectedUser, actionFilter]);
 
   // ===================== Toast Helper =====================
   const showToast = useCallback((message, type = "success") => {
@@ -687,7 +679,7 @@ export default function EngineerRecords() {
     }
   };
 
-  // ===================== Load Records (غير مؤرشفة فقط) =====================
+  // ===================== Load All Records (including archived) =====================
   const loadRecords = async () => {
     if (!department) return;
 
@@ -695,11 +687,13 @@ export default function EngineerRecords() {
     setError("");
 
     try {
-      console.log("📡 Loading records for department:", department);
+      console.log("📡 Loading all records for department:", department);
 
+      // Use /all endpoints to get all items including archived
       const [irsRes, revsRes] = await Promise.all([
-        fetch(`${API_URL}/irs`), // ملاحظة: /irs يجلب غير المؤرشف فقط (isArchived == false)
-        fetch(`${API_URL}/revs`), // ملاحظة: /revs يجلب غير المؤرشف فقط
+        fetch(`${API_URL}/irs/all`),
+        fetch(`${API_URL}/revs/all`),
+        // fetch(`${API_URL}/shopdrawings/all`) // إذا كان موجوداً
       ]);
 
       let irsList = [];
@@ -710,7 +704,7 @@ export default function EngineerRecords() {
             ir.department === department ||
             getDepartmentAbbr(ir.department) === departmentAbbr,
         );
-        console.log(`✅ Loaded ${irsList.length} IRs`);
+        console.log(`✅ Loaded ${irsList.length} IRs (all)`);
       }
 
       let revsList = [];
@@ -721,7 +715,7 @@ export default function EngineerRecords() {
             rev.department === department ||
             getDepartmentAbbr(rev.department) === departmentAbbr,
         );
-        console.log(`✅ Loaded ${revsList.length} Revisions`);
+        console.log(`✅ Loaded ${revsList.length} Revisions (all)`);
       }
 
       const allRecords = [
@@ -757,14 +751,15 @@ export default function EngineerRecords() {
         })),
       ];
 
-      console.log(`📊 Total records: ${allRecords.length}`);
+      console.log(`📊 Total records loaded: ${allRecords.length}`);
 
+      // Sort by date descending (newest first)
       allRecords.sort((a, b) => b.date - a.date);
 
       setRecords(allRecords);
-
       calculateStats(allRecords);
 
+      // Update filter options based on loaded data
       const uniqueProjects = [
         ...new Set(allRecords.map((r) => r.project).filter(Boolean)),
       ].sort();
@@ -790,10 +785,11 @@ export default function EngineerRecords() {
     }
   };
 
-  // ===================== Calculate Statistics (بدون archived) =====================
+  // ===================== Calculate Statistics =====================
   const calculateStats = (recordsList) => {
-    const pending = recordsList.filter((r) => !r.isDone).length;
-    const completed = recordsList.filter((r) => r.isDone).length;
+    const pending = recordsList.filter((r) => !r.isDone && !r.isArchived).length;
+    const completed = recordsList.filter((r) => r.isDone && !r.isArchived).length;
+    const archived = recordsList.filter((r) => r.isArchived).length;
     const revisions = recordsList.filter((r) => r.isRevision).length;
     const cpr = recordsList.filter(
       (r) => !r.isRevision && r.requestType === "CPR",
@@ -806,6 +802,7 @@ export default function EngineerRecords() {
       total: recordsList.length,
       pending,
       completed,
+      archived, // قد لا نعرضه ولكن يمكن استخدامه لاحقاً
       revisions,
       cpr,
       ir,
@@ -828,9 +825,11 @@ export default function EngineerRecords() {
     yearAgo.setFullYear(today.getFullYear() - 1);
 
     return records.filter((record) => {
+      // Project filter
       if (filters.project !== "all" && record.project !== filters.project)
         return false;
 
+      // Type filter
       if (filters.type !== "all") {
         if (
           filters.type === "ir" &&
@@ -846,18 +845,25 @@ export default function EngineerRecords() {
         if (filters.type === "revision" && !record.isRevision) return false;
       }
 
+      // Status filter (pending/completed/archived handled via archived filter if needed)
       if (filters.status !== "all") {
-        if (filters.status === "pending" && record.isDone) return false;
-        if (filters.status === "completed" && !record.isDone) return false;
+        if (filters.status === "pending" && (record.isDone || record.isArchived))
+          return false;
+        if (filters.status === "completed" && (!record.isDone || record.isArchived))
+          return false;
+        // لا يوجد فلتر archived في الخيارات، لكن يمكن إضافته لاحقاً
       }
 
+      // User filter
       if (selectedUser !== "all" && record.user !== selectedUser) return false;
 
+      // Action filter
       if (actionFilter !== "all") {
         const val = record.action || "";
         if (val !== actionFilter) return false;
       }
 
+      // Date range filter
       if (dateRange !== "all") {
         const recordDate = record.date;
         switch (dateRange) {
@@ -876,6 +882,7 @@ export default function EngineerRecords() {
         }
       }
 
+      // Search term filter
       if (debouncedSearch && debouncedSearch.trim() !== "") {
         const term = debouncedSearch.toLowerCase();
         const displayNumber = (record.displayNumber || "").toLowerCase();
@@ -908,8 +915,12 @@ export default function EngineerRecords() {
 
   // ===================== Style Helper Functions =====================
   const getStatusColor = useCallback((item) => {
-    if (item.isDone)
+    if (item.isArchived) {
+      return "bg-gray-100 text-gray-800 border border-gray-300";
+    }
+    if (item.isDone) {
       return "bg-emerald-100 text-emerald-800 border border-emerald-300";
+    }
     return "bg-yellow-100 text-yellow-800 border border-yellow-300";
   }, []);
 
@@ -925,6 +936,7 @@ export default function EngineerRecords() {
   }, []);
 
   const getStatusText = useCallback((item) => {
+    if (item.isArchived) return "Archived";
     return item.isDone ? "Done" : "Pending";
   }, []);
 
@@ -1086,7 +1098,7 @@ export default function EngineerRecords() {
         {/* Information Footer */}
         <div className="mt-8 bg-blue-50 border border-blue-200 rounded-xl p-4 text-center text-blue-700">
           <p>
-            Showing all records for {department} department • Active only
+            Showing all records for {department} department • Including archived
           </p>
         </div>
       </div>

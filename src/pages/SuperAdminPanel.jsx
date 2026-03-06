@@ -1,3 +1,4 @@
+// src/pages/SuperAdminPanel.jsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import DashboardTab from '../components/admin/DashboardTab';
@@ -18,7 +19,7 @@ const SuperAdminPanel = () => {
   const [systemInfo, setSystemInfo] = useState(null);
   const [toast, setToast] = useState({ show: false, message: '', type: '' });
 
-  // التحقق من المصادقة
+  // Check authentication
   useEffect(() => {
     const storedUser = JSON.parse(localStorage.getItem('user') || 'null');
     
@@ -28,7 +29,6 @@ const SuperAdminPanel = () => {
     }
 
     if (storedUser.role !== 'admin') {
-      // توجيه إلى لوحة التحكم المناسبة حسب الدور
       if (storedUser.role === 'dc') {
         navigate('/dc');
       } else {
@@ -61,14 +61,14 @@ const SuperAdminPanel = () => {
   };
 
   const tabs = [
-    { id: 'dashboard', label: 'لوحة التحكم', icon: '📊', component: <DashboardTab /> },
-    { id: 'users', label: 'إدارة المستخدمين', icon: '👥', component: <UsersManagementTab /> },
-    { id: 'projects', label: 'إدارة المشاريع', icon: '📁', component: <ProjectsManagementTab /> },
-    { id: 'data', label: 'إدارة البيانات', icon: '🗃️', component: <DataManagementTab /> },
-    { id: 'settings', label: 'إعدادات النظام', icon: '⚙️', component: <SystemSettingsTab /> },
-    { id: 'engineer', label: 'وضع المهندس', icon: '👷', component: <EngineerModeTab /> },
-    { id: 'dc', label: 'وضع DC', icon: '📋', component: <DCModeTab /> },
-    { id: 'tools', label: 'أدوات النظام', icon: '🔧', component: <SystemToolsTab /> }
+    { id: 'dashboard', label: 'Dashboard', icon: '📊', component: <DashboardTab /> },
+    { id: 'users', label: 'User Management', icon: '👥', component: <UsersManagementTab /> },
+    { id: 'projects', label: 'Project Management', icon: '📁', component: <ProjectsManagementTab /> },
+    { id: 'data', label: 'Data Management', icon: '🗃️', component: <DataManagementTab /> },
+    { id: 'settings', label: 'System Settings', icon: '⚙️', component: <SystemSettingsTab /> },
+    { id: 'engineer', label: 'Engineer Mode', icon: '👷', component: <EngineerModeTab /> },
+    { id: 'dc', label: 'DC Mode', icon: '📋', component: <DCModeTab /> },
+    { id: 'tools', label: 'System Tools', icon: '🔧', component: <SystemToolsTab /> }
   ];
 
   const handleLogout = () => {
@@ -76,22 +76,26 @@ const SuperAdminPanel = () => {
     navigate('/login');
   };
 
+  const goToDCDashboard = () => {
+    // Temporarily switch user to DC role (or just navigate)
+    // To actually access DC dashboard, we need a DC user. We can create a mock or use same user.
+    // Since admin can view any, just navigate to /dc and rely on the route to handle it.
+    navigate('/dc');
+  };
+
   if (loading) {
     return (
-      <>
-        <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
-          <div className="text-center">
-            <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
-            <p className="text-gray-600 font-medium">جاري تحميل لوحة المسؤولين...</p>
-          </div>
+      <div className="min-h-screen bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center">
+        <div className="text-center">
+          <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mb-4"></div>
+          <p className="text-gray-600 font-medium">Loading Admin Panel...</p>
         </div>
-      </>
+      </div>
     );
   }
 
   return (
     <>
-      
       {/* Toast Notification */}
       {toast.show && (
         <div className={`fixed top-5 right-5 z-50 px-6 py-3 rounded-lg shadow-lg text-white font-medium animate-in fade-in slide-in-from-top-5 ${
@@ -110,12 +114,8 @@ const SuperAdminPanel = () => {
           <div className="max-w-7xl mx-auto px-4 py-6">
             <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
               <div>
-                <h1 className="text-3xl md:text-4xl font-bold mb-2">
-                  👑 لوحة المسؤولين
-                </h1>
-                <p className="text-slate-300 text-lg">
-                  إدارة النظام الشاملة - التحكم الكامل في جميع الوظائف
-                </p>
+                <h1 className="text-3xl md:text-4xl font-bold mb-2">👑 Admin Panel</h1>
+                <p className="text-slate-300 text-lg">Complete system control – manage all functions</p>
               </div>
               
               <div className="flex items-center gap-4">
@@ -123,7 +123,7 @@ const SuperAdminPanel = () => {
                   <div className="flex items-center gap-3">
                     <div className="text-right">
                       <p className="font-bold">{user.fullname || user.username}</p>
-                      <p className="text-slate-300 text-sm">مسؤول النظام</p>
+                      <p className="text-slate-300 text-sm">System Administrator</p>
                     </div>
                     <div className="w-10 h-10 bg-gradient-to-r from-blue-600 to-indigo-600 rounded-full flex items-center justify-center text-white font-bold">
                       {user.username?.charAt(0).toUpperCase()}
@@ -131,10 +131,17 @@ const SuperAdminPanel = () => {
                   </div>
                 )}
                 <button
+                  onClick={goToDCDashboard}
+                  className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium transition"
+                  title="Switch to Document Controller view"
+                >
+                  📋 DC Dashboard
+                </button>
+                <button
                   onClick={handleLogout}
                   className="px-4 py-2 bg-white/10 hover:bg-white/20 text-white rounded-lg font-medium transition"
                 >
-                  تسجيل الخروج
+                  Logout
                 </button>
               </div>
             </div>
@@ -172,15 +179,15 @@ const SuperAdminPanel = () => {
             <div className="flex flex-col md:flex-row justify-between items-center gap-4">
               <div>
                 <p className="text-slate-300 mb-1">IR Management System</p>
-                <p className="text-sm text-slate-400">نسخة النظام: {systemInfo?.version || '2.2'}</p>
+                <p className="text-sm text-slate-400">Version: {systemInfo?.version || '2.2'}</p>
               </div>
               <div className="flex items-center gap-4">
                 <div className="flex items-center gap-2">
                   <div className="w-2 h-2 rounded-full bg-green-500 animate-pulse"></div>
-                  <span className="text-sm">النظام نشط</span>
+                  <span className="text-sm">System Active</span>
                 </div>
                 <div className="text-sm text-slate-300">
-                  آخر تحديث: {new Date().toLocaleTimeString()}
+                  Last updated: {new Date().toLocaleTimeString()}
                 </div>
               </div>
             </div>

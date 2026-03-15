@@ -431,7 +431,7 @@ const handleRemoveLevel = (type, levelToRemove) => {
       const location = selectedLocation ? ` At ${selectedLocation}` : "";
       const typeStr = typesMap[selectedLocation] ? ` (${typesMap[selectedLocation]})` : "";
       // إضافة surveyInput إذا كان موجوداً
-      const survey = surveyInput ? `${surveyInput} ` : "";
+      const survey = surveyInput ? ` ${surveyInput}` : "";
       const finalDesc = `${desc}${floor}${survey}${typeStr}${location}`.trim();
       setFinalDescription(finalDesc);
       setOriginalFinalDesc(finalDesc);

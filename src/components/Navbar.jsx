@@ -94,6 +94,7 @@ export default function Navbar() {
                             {user.role === "admin" && (
                                 <>
                                     <NavItem to="/dc" label="DC Dashboard" active={location.pathname === "/dc"} />
+                                    <NavItem to="/dc/shopdrawings" label="📐 Shop Drawings" active={location.pathname === "/dc/shopdrawings"} />
                                     <NavItem to="/engineer" label="Engineer" active={location.pathname === "/engineer"} />
                                     <NavItem to="/projects-admin" label="Projects" active={location.pathname.includes("projects")} />
                                     <NavItem to="/users-admin" label="Users" active={location.pathname.includes("users")} />
@@ -104,6 +105,7 @@ export default function Navbar() {
                             {user.role === "dc" && (
                                 <>
                                     <NavItem to="/dc" label="Dashboard" active={location.pathname === "/dc"} />
+                                    <NavItem to="/dc/shopdrawings" label="📐 Shop Drawings" active={location.pathname === "/dc/shopdrawings"} />
                                     <NavItem to="/dc-archive" label="Archive" active={location.pathname.includes("archive")} />
                                 </>
                             )}
@@ -184,6 +186,7 @@ export default function Navbar() {
                                 {user.role === "admin" && (
                                     <>
                                         <MobileNavItem to="/dc" label="DC Dashboard" />
+                                        <MobileNavItem to="/dc/shopdrawings" label="📐 Shop Drawings" />
                                         <MobileNavItem to="/engineer" label="Engineer" />
                                         <MobileNavItem to="/projects-admin" label="Projects" />
                                         <MobileNavItem to="/users-admin" label="Users" />
@@ -194,6 +197,7 @@ export default function Navbar() {
                                 {user.role === "dc" && (
                                     <>
                                         <MobileNavItem to="/dc" label="Dashboard" />
+                                        <MobileNavItem to="/dc/shopdrawings" label="📐 Shop Drawings" />
                                         <MobileNavItem to="/dc-archive" label="Archive" />
                                     </>
                                 )}
@@ -229,4 +233,3 @@ export default function Navbar() {
         </>
     );
 }
-

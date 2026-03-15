@@ -10,6 +10,7 @@ import EngineerPage from "./pages/EngineerPage.jsx";
 import EngineerRecords from "./pages/EngineerRecords.jsx";
 import DcPage from "./pages/DcPage.jsx";
 import DcArchive from "./pages/DcArchive.jsx";
+import DCShopDrawingsPage from "./pages/DCShopDrawingsPage.jsx"; // ✅ استيراد صفحة SD الجديدة
 
 // NEW: Super Admin Panel (Replaces old admin pages)
 import SuperAdminPanel from "./pages/SuperAdminPanel.jsx";
@@ -164,6 +165,15 @@ export default function App() {
                     element={
                         <ProtectedRoute allowedRoles={["dc", "admin"]}>
                             <DcPage />
+                        </ProtectedRoute>
+                    }
+                />
+
+                <Route
+                    path="/dc/shopdrawings" // ✅ مسار جديد لصفحة Shop Drawings الخاصة بالـ DC
+                    element={
+                        <ProtectedRoute allowedRoles={["dc", "admin"]}>
+                            <DCShopDrawingsPage />
                         </ProtectedRoute>
                     }
                 />
